@@ -1,0 +1,16 @@
+# Next.js
+.next/
+out/
+
+# Node
+node_modules/
+
+# Local data (never commit the database)
+../data/
+
+# Env
+.env.local
+.env*.local
+
+# OS
+.DS_Store

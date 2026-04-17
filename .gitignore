@@ -1,0 +1,35 @@
+# ── Local working docs (not project code) ─────────────────
+docs/
+precontext_birdbrain.md
+plan_bird_brain_*.plan.md
+ChatQuote.txt
+
+# ── Test corpora / local data ──────────────────────────────
+birdsong game copy/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# ── Node / Next.js ─────────────────────────────────────────
+node_modules/
+.next/
+out/
+
+# ── Rust / Tauri ───────────────────────────────────────────
+src-tauri/target/
+target/
+
+# ── Environment / secrets ──────────────────────────────────
+.env
+.env.local
+.env.*.local
+secrets.json
+
+# ── Editor / OS ────────────────────────────────────────────
+.DS_Store
+.cursor/
+*.log
+
+# ── TypeScript build artifacts ─────────────────────────────
+*.tsbuildinfo

@@ -1,0 +1,888 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { isTauri, openWorkspaceWindow, pickFolderNative } from '@/lib/desktop/tauri-bridge';
+import { FolderBrowserDialog } from './FolderBrowserDialog';
+
+interface WorkspaceRecord {
+  id: string;
+  name: string;
+  folder_path: string;
+  db_path: string;
+  created_at: number;
+  last_opened_at: number | null;
+}
+
+interface IngestStats {
+  total: number;
+  added: number;
+  updated: number;
+  removed: number;
+}
+
+type IngestPhase =
+  | { kind: 'idle' }
+  | { kind: 'registering'; folder: string }
+  | { kind: 'ingesting'; folder: string }
+  | { kind: 'done'; folder: string; stats: IngestStats; workspaceId: string }
+  | { kind: 'empty'; folder: string; workspaceId: string }
+  | { kind: 'error'; folder: string; message: string };
+
+type OpenMode = 'last-opened' | 'fresh-ingest' | 'pick-folder';
+
+const OPEN_MODE_COPY: Record<OpenMode, { title: string; description: string }> = {
+  'last-opened': {
+    title: 'Pick up where you left off',
+    description: 'Open the most recent workspace with its cached ontology. Fastest way to resume.',
+  },
+  'fresh-ingest': {
+    title: 'Re-ingest and rebuild',
+    description: 'Re-scan the selected folder for new markdown, then open it. Use after heavy edits.',
+  },
+  'pick-folder': {
+    title: 'Begin a new project',
+    description: 'Add a brand-new folder as a workspace and build its ontology from scratch.',
+  },
+};
+
+export function WorkspacePicker({
+  initialWorkspaces,
+}: {
+  initialWorkspaces: WorkspaceRecord[];
+}) {
+  const router = useRouter();
+  const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>(initialWorkspaces);
+  const [folderInput, setFolderInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const [hasNative, setHasNative] = useState(false);
+  const [openMode, setOpenMode] = useState<OpenMode>('last-opened');
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [phase, setPhase] = useState<IngestPhase>({ kind: 'idle' });
+
+  useEffect(() => {
+    setHasNative(isTauri());
+  }, []);
+
+  const sorted = useMemo(
+    () => [...workspaces].sort((a, b) => (b.last_opened_at ?? 0) - (a.last_opened_at ?? 0)),
+    [workspaces]
+  );
+  const mostRecent = sorted[0] ?? null;
+
+  useEffect(() => {
+    if (!mostRecent && openMode === 'last-opened') {
+      setOpenMode('pick-folder');
+    }
+  }, [mostRecent, openMode]);
+
+  async function refreshWorkspaces() {
+    const res = await fetch('/api/workspaces', { cache: 'no-store' });
+    if (res.ok) {
+      const json = (await res.json()) as { workspaces: WorkspaceRecord[] };
+      setWorkspaces(json.workspaces);
+    }
+  }
+
+  async function beginAgain() {
+    if (openMode === 'last-opened' && mostRecent) {
+      await openWorkspace(mostRecent, { ingestFirst: false });
+      return;
+    }
+    if (openMode === 'fresh-ingest' && mostRecent) {
+      await openWorkspace(mostRecent, { ingestFirst: true });
+      return;
+    }
+    await addWorkspace();
+  }
+
+  async function addWorkspace(override?: { folder?: string; name?: string; guidance?: string }) {
+    const folder = (override?.folder ?? folderInput).trim();
+    const name = (override?.name ?? nameInput).trim();
+    const userGuidance = (override?.guidance ?? '').trim();
+    if (!folder) {
+      setMessage('Pick or paste a folder path before adding.');
+      return;
+    }
+    setBusyId('__new__');
+    setMessage('');
+    setPhase({ kind: 'registering', folder });
+    try {
+      const res = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_path: folder, name: name || undefined }),
+      });
+      const json = (await res.json()) as { workspace?: WorkspaceRecord; error?: string };
+      if (!res.ok || !json.workspace) {
+        setPhase({
+          kind: 'error',
+          folder,
+          message: json.error ?? 'Could not add workspace.',
+        });
+        return;
+      }
+      setFolderInput('');
+      setNameInput('');
+      await refreshWorkspaces();
+      await openWorkspace(json.workspace, { ingestFirst: true, userGuidance });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function openWorkspace(
+    ws: WorkspaceRecord,
+    { ingestFirst, userGuidance }: { ingestFirst: boolean; userGuidance?: string }
+  ) {
+    setBusyId(ws.id);
+    setMessage('');
+    try {
+      if (ingestFirst) {
+        setPhase({ kind: 'ingesting', folder: ws.folder_path });
+        const res = await fetch('/api/workspace/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: ws.id,
+            docs_path: ws.folder_path,
+            user_guidance: userGuidance?.trim() || undefined,
+          }),
+        });
+        const json = (await res.json()) as { error?: string; stats?: IngestStats };
+        if (!res.ok) {
+          setPhase({
+            kind: 'error',
+            folder: ws.folder_path,
+            message: json.error ?? 'Ingestion failed.',
+          });
+          return;
+        }
+        const stats = json.stats ?? { total: 0, added: 0, updated: 0, removed: 0 };
+        if (stats.total === 0) {
+          setPhase({ kind: 'empty', folder: ws.folder_path, workspaceId: ws.id });
+          return;
+        }
+        setPhase({ kind: 'done', folder: ws.folder_path, stats, workspaceId: ws.id });
+        return;
+      }
+      router.push(`/w/${encodeURIComponent(ws.id)}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function enterWorkspace(workspaceId: string) {
+    setPhase({ kind: 'idle' });
+    router.push(`/w/${encodeURIComponent(workspaceId)}`);
+  }
+
+  async function removeWorkspace(ws: WorkspaceRecord) {
+    if (!confirm(`Remove ${ws.name} from the picker? (The folder and DB file are not deleted.)`)) {
+      return;
+    }
+    await fetch(`/api/workspaces?id=${encodeURIComponent(ws.id)}`, { method: 'DELETE' });
+    await refreshWorkspaces();
+  }
+
+  const busy = busyId !== null;
+  const canBeginAgain =
+    (openMode === 'last-opened' && Boolean(mostRecent)) ||
+    (openMode === 'fresh-ingest' && Boolean(mostRecent)) ||
+    (openMode === 'pick-folder' && folderInput.trim().length > 0);
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        width: '100vw',
+        background: '#0a0a0a',
+        color: '#f0f0f0',
+        display: 'flex',
+        alignItems: 'stretch',
+      }}
+    >
+      <div style={{ width: '58%', padding: '56px 60px 44px', borderRight: '1px solid #151515' }}>
+        <div
+          style={{
+            fontSize: '0.72rem',
+            color: '#00b4d8',
+            letterSpacing: '0.22em',
+            fontWeight: 700,
+            marginBottom: 18,
+          }}
+        >
+          BIRD BRAIN · PROJECTS
+        </div>
+        <h1
+          style={{
+            fontSize: '4.6rem',
+            lineHeight: 0.95,
+            fontWeight: 200,
+            letterSpacing: '-0.04em',
+            margin: 0,
+          }}
+        >
+          begin
+          <br />
+          again
+        </h1>
+        <p style={{ marginTop: 22, fontSize: '1rem', color: '#bbb', lineHeight: 1.7, maxWidth: 620 }}>
+          A workspace is just a folder of markdown. Pick one below, or point at a new one — Bird
+          Brain ingests it, builds the overview, and drops you into the panorama.
+        </p>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: 14,
+            marginTop: 28,
+          }}
+        >
+          <PurposeCard
+            title="For Builders"
+            body="Clarify what matters now, what changed, and which concepts deserve active attention."
+          />
+          <PurposeCard
+            title="For Newcomers"
+            body="Define ideas plainly before assuming any internal shorthand or prior familiarity."
+          />
+          <PurposeCard
+            title="For Product"
+            body="Show Bird Brain as a portable way to turn a messy archive into interactive project understanding."
+          />
+        </div>
+
+        <div style={{ marginTop: 34 }}>
+          <div
+            style={{
+              fontSize: '0.62rem',
+              color: '#666',
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              marginBottom: 10,
+            }}
+          >
+            open mode
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+            {(Object.keys(OPEN_MODE_COPY) as OpenMode[]).map((key) => {
+              const disabled =
+                (key === 'last-opened' || key === 'fresh-ingest') && !mostRecent;
+              return (
+                <button
+                  key={key}
+                  onClick={() => !disabled && setOpenMode(key)}
+                  disabled={disabled}
+                  style={{
+                    textAlign: 'left',
+                    background: openMode === key ? '#101d21' : '#0f0f0f',
+                    border: `1px solid ${openMode === key ? '#00b4d8' : '#1c1c1c'}`,
+                    padding: '14px 16px',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    color: '#ddd',
+                    opacity: disabled ? 0.45 : 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '0.82rem',
+                      color: openMode === key ? '#00b4d8' : '#f0f0f0',
+                      marginBottom: 6,
+                    }}
+                  >
+                    {OPEN_MODE_COPY[key].title}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.5 }}>
+                    {OPEN_MODE_COPY[key].description}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {openMode === 'pick-folder' && (
+          <div style={{ marginTop: 28 }}>
+            <div
+              style={{
+                fontSize: '0.62rem',
+                color: '#666',
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                marginBottom: 10,
+              }}
+            >
+              folder to ingest
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+              <input
+                type="text"
+                placeholder="/absolute/path/to/folder"
+                value={folderInput}
+                onChange={(e) => setFolderInput(e.target.value)}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                onClick={async () => {
+                  if (hasNative) {
+                    const picked = await pickFolderNative();
+                    if (picked) {
+                      setFolderInput(picked.path);
+                      if (!nameInput) setNameInput(picked.name);
+                    }
+                  } else {
+                    setBrowserOpen(true);
+                  }
+                }}
+                style={secondaryButtonStyle(false)}
+              >
+                browse
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="name (optional)"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              style={{ ...inputStyle, marginTop: 10 }}
+            />
+            <div style={{ fontSize: '0.68rem', color: '#555', marginTop: 10, lineHeight: 1.5 }}>
+              {hasNative
+                ? 'Click browse to open the OS folder picker, or paste an absolute path.'
+                : 'Click browse to walk through your home folder, or paste an absolute path.'}
+            </div>
+            <div
+              style={{
+                fontSize: '0.66rem',
+                color: '#5f6b6f',
+                marginTop: 8,
+                lineHeight: 1.55,
+                padding: '8px 10px',
+                border: '1px dashed #1c2a2e',
+                background: '#0c1214',
+              }}
+            >
+              Only <code style={{ color: '#00b4d8' }}>.md</code> files are ingested. Images, PDFs,
+              videos, and hidden dot-folders are skipped automatically — nothing is copied or
+              modified in your folder.
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            marginTop: 30,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            onClick={beginAgain}
+            disabled={!canBeginAgain || busy}
+            style={{
+              background: canBeginAgain ? '#00d68f' : '#1a1a1a',
+              color: canBeginAgain ? '#041015' : '#666',
+              border: 'none',
+              padding: '12px 18px',
+              cursor: !canBeginAgain || busy ? 'not-allowed' : 'pointer',
+              fontSize: '0.68rem',
+              letterSpacing: '0.16em',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              opacity: busy ? 0.7 : 1,
+            }}
+          >
+            {busy
+              ? 'working…'
+              : openMode === 'pick-folder'
+                ? 'begin'
+                : openMode === 'fresh-ingest'
+                  ? 're-ingest'
+                  : 'open'}
+          </button>
+          {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
+        </div>
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          padding: '56px 48px 44px',
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: '0.6rem',
+            color: '#00d68f',
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
+            marginBottom: 14,
+          }}
+        >
+          {sorted.length === 0
+            ? 'no workspaces yet'
+            : `${sorted.length} workspace${sorted.length === 1 ? '' : 's'}`}
+        </div>
+
+        {sorted.length === 0 ? (
+          <div style={{ fontSize: '0.82rem', color: '#777', lineHeight: 1.7, maxWidth: 460 }}>
+            Pick "begin a new project" on the left and paste a folder of markdown. Bird Brain will
+            register it, ingest every file inside, and drop you into the ontology startup screen.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              overflowY: 'auto',
+              paddingRight: 6,
+            }}
+            className="thin-scrollbar"
+          >
+            {sorted.map((ws, i) => (
+              <div
+                key={ws.id}
+                style={{
+                  background: '#0f0f0f',
+                  border: `1px solid ${i === 0 ? '#1b3b42' : '#181818'}`,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontSize: '1rem', color: '#eee' }}>{ws.name}</div>
+                  <div
+                    style={{
+                      fontSize: '0.62rem',
+                      color: i === 0 ? '#00b4d8' : '#555',
+                      letterSpacing: '0.14em',
+                      textTransform: 'uppercase',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {i === 0 ? `most recent · ${formatAgo(ws.last_opened_at)}` : formatAgo(ws.last_opened_at)}
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#888', wordBreak: 'break-all' }}>
+                  {ws.folder_path}
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => openWorkspace(ws, { ingestFirst: false })}
+                    disabled={busyId === ws.id}
+                    style={primaryButtonStyle(busyId === ws.id)}
+                  >
+                    {busyId === ws.id ? 'opening…' : 'open'}
+                  </button>
+                  {hasNative && (
+                    <button
+                      onClick={() => openWorkspaceWindow(ws.id, ws.name)}
+                      disabled={busyId === ws.id}
+                      style={secondaryButtonStyle(false)}
+                      title="Open this workspace in its own native window"
+                    >
+                      new window
+                    </button>
+                  )}
+                  <button
+                    onClick={() => openWorkspace(ws, { ingestFirst: true })}
+                    disabled={busyId === ws.id}
+                    style={secondaryButtonStyle(busyId === ws.id)}
+                  >
+                    re-ingest + open
+                  </button>
+                  <button
+                    onClick={() => removeWorkspace(ws)}
+                    disabled={busyId === ws.id}
+                    style={dangerButtonStyle(busyId === ws.id)}
+                  >
+                    remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {browserOpen && (
+        <FolderBrowserDialog
+          initialPath={folderInput.trim() || undefined}
+          onCancel={() => setBrowserOpen(false)}
+          onPick={(picked) => {
+            setFolderInput(picked.path);
+            if (!nameInput) setNameInput(picked.name);
+            setBrowserOpen(false);
+            void addWorkspace({
+              folder: picked.path,
+              name: nameInput || picked.name,
+              guidance: picked.guidance,
+            });
+          }}
+        />
+      )}
+
+      {phase.kind !== 'idle' && (
+        <IngestProgressModal
+          phase={phase}
+          onClose={() => setPhase({ kind: 'idle' })}
+          onEnter={enterWorkspace}
+        />
+      )}
+    </div>
+  );
+}
+
+function IngestProgressModal({
+  phase,
+  onClose,
+  onEnter,
+}: {
+  phase: IngestPhase;
+  onClose: () => void;
+  onEnter: (workspaceId: string) => void;
+}) {
+  const autoEnteredRef = useRef(false);
+  useEffect(() => {
+    if (phase.kind !== 'done') {
+      autoEnteredRef.current = false;
+      return;
+    }
+    if (autoEnteredRef.current) return;
+    autoEnteredRef.current = true;
+    const id = phase.workspaceId;
+    const timer = setTimeout(() => onEnter(id), 900);
+    return () => clearTimeout(timer);
+  }, [phase, onEnter]);
+  const titleCopy =
+    phase.kind === 'registering'
+      ? 'Registering workspace'
+      : phase.kind === 'ingesting'
+        ? 'Ingesting markdown'
+        : phase.kind === 'done'
+          ? 'Ready to open'
+          : phase.kind === 'empty'
+            ? 'No markdown found'
+            : 'Ingest failed';
+
+  const titleColor =
+    phase.kind === 'done' ? '#00d68f' : phase.kind === 'error' ? '#e74c9b' : phase.kind === 'empty' ? '#e7b24c' : '#00b4d8';
+
+  const folder =
+    'folder' in phase ? phase.folder : '';
+
+  const busy = phase.kind === 'registering' || phase.kind === 'ingesting';
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.82)',
+        zIndex: 90,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+      onClick={busy ? undefined : onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#0a0a0a',
+          border: `1px solid ${titleColor}22`,
+          color: '#f0f0f0',
+          width: 'min(560px, 94vw)',
+          padding: '26px 28px',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '0.6rem',
+            color: titleColor,
+            letterSpacing: '0.22em',
+            fontWeight: 700,
+            marginBottom: 10,
+          }}
+        >
+          {titleCopy.toUpperCase()}
+        </div>
+        <div style={{ fontSize: '1.35rem', fontWeight: 300, lineHeight: 1.25, marginBottom: 14 }}>
+          {phase.kind === 'registering' && 'Creating the workspace database…'}
+          {phase.kind === 'ingesting' && 'Walking the folder for markdown files.'}
+          {phase.kind === 'done' &&
+            `Added ${phase.stats.added}, updated ${phase.stats.updated}, removed ${phase.stats.removed}.`}
+          {phase.kind === 'empty' && 'This folder has no .md files under it.'}
+          {phase.kind === 'error' && phase.message}
+        </div>
+        {folder && (
+          <div
+            style={{
+              fontSize: '0.72rem',
+              color: '#777',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              marginBottom: 18,
+              wordBreak: 'break-all',
+            }}
+          >
+            {folder}
+          </div>
+        )}
+
+        {busy && <IngestSpinnerRow />}
+
+        {phase.kind === 'done' && (
+          <IngestStatsBlock stats={phase.stats} />
+        )}
+
+        {phase.kind === 'empty' && (
+          <div
+            style={{
+              fontSize: '0.76rem',
+              color: '#aaa',
+              lineHeight: 1.6,
+              padding: '12px 14px',
+              background: '#120f08',
+              border: '1px solid #2a2414',
+              marginBottom: 14,
+            }}
+          >
+            Bird Brain only reads <code style={{ color: '#e7b24c' }}>.md</code> files. You can still
+            open the workspace with its empty database, or cancel and point at a folder that has
+            markdown inside it.
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            justifyContent: 'flex-end',
+            marginTop: 14,
+            flexWrap: 'wrap',
+          }}
+        >
+          {phase.kind === 'done' && (
+            <div
+              style={{
+                fontSize: '0.66rem',
+                color: '#00d68f',
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+                padding: '10px 14px',
+                border: '1px solid #1b3b2f',
+                background: '#071613',
+              }}
+            >
+              entering workspace…
+            </div>
+          )}
+          {phase.kind === 'empty' && (
+            <button
+              onClick={() => onEnter(phase.workspaceId)}
+              style={{
+                background: '#00d68f',
+                color: '#041015',
+                border: 'none',
+                padding: '10px 16px',
+                cursor: 'pointer',
+                fontSize: '0.66rem',
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+              }}
+            >
+              open anyway
+            </button>
+          )}
+          {!busy && (
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                color: '#ddd',
+                border: '1px solid #2c2c2c',
+                padding: '10px 14px',
+                cursor: 'pointer',
+                fontSize: '0.64rem',
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+              }}
+            >
+              {phase.kind === 'done' || phase.kind === 'empty' ? 'stay here' : 'close'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IngestSpinnerRow() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 14px',
+        background: '#0f1316',
+        border: '1px solid #16242a',
+        marginBottom: 14,
+      }}
+    >
+      <div
+        style={{
+          width: 12,
+          height: 12,
+          border: '2px solid #00b4d8',
+          borderRightColor: 'transparent',
+          borderRadius: '50%',
+          animation: 'bb-spin 0.85s linear infinite',
+        }}
+      />
+      <div style={{ fontSize: '0.76rem', color: '#8fb6c3' }}>
+        Parsing markdown, chunking by heading, writing to SQLite.
+      </div>
+      <style>{`@keyframes bb-spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function IngestStatsBlock({ stats }: { stats: IngestStats }) {
+  const rows: Array<{ label: string; value: number; color: string }> = [
+    { label: 'markdown files found', value: stats.total, color: '#00b4d8' },
+    { label: 'added', value: stats.added, color: '#00d68f' },
+    { label: 'updated', value: stats.updated, color: '#e7b24c' },
+    { label: 'removed', value: stats.removed, color: '#e74c9b' },
+  ];
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gap: 10,
+        marginBottom: 14,
+      }}
+    >
+      {rows.map((r) => (
+        <div
+          key={r.label}
+          style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '10px 12px' }}
+        >
+          <div
+            style={{
+              fontSize: '0.56rem',
+              color: '#666',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              marginBottom: 6,
+            }}
+          >
+            {r.label}
+          </div>
+          <div style={{ fontSize: '1.2rem', color: r.color, fontWeight: 300 }}>{r.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PurposeCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '14px 16px' }}>
+      <div style={{ fontSize: '0.74rem', color: '#f0f0f0', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.55 }}>{body}</div>
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: '#0f0f0f',
+  border: '1px solid #1c1c1c',
+  color: '#eee',
+  padding: '12px 14px',
+  fontSize: '0.82rem',
+  outline: 'none',
+};
+
+function primaryButtonStyle(busy: boolean): React.CSSProperties {
+  return {
+    background: '#00d68f',
+    color: '#041015',
+    border: 'none',
+    padding: '10px 16px',
+    cursor: busy ? 'wait' : 'pointer',
+    fontSize: '0.66rem',
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    opacity: busy ? 0.7 : 1,
+  };
+}
+
+function secondaryButtonStyle(busy: boolean): React.CSSProperties {
+  return {
+    background: 'transparent',
+    color: '#f0f0f0',
+    border: '1px solid #2c2c2c',
+    padding: '10px 16px',
+    cursor: busy ? 'wait' : 'pointer',
+    fontSize: '0.66rem',
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    opacity: busy ? 0.7 : 1,
+  };
+}
+
+function dangerButtonStyle(busy: boolean): React.CSSProperties {
+  return {
+    background: 'transparent',
+    color: '#e74c9b',
+    border: '1px solid #3a1a2a',
+    padding: '10px 16px',
+    cursor: busy ? 'wait' : 'pointer',
+    fontSize: '0.66rem',
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    opacity: busy ? 0.7 : 1,
+  };
+}
+
+function formatAgo(ts: number | null): string {
+  if (!ts) return 'never opened';
+  const secs = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}

@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  --accent: #00b4d8;
+  --accent-dim: #0096b7;
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --border: #222222;
+  --text: #f0f0f0;
+  --text-dim: #888888;
+  --text-muted: #444444;
+
+  --status-canon: #00d68f;
+  --status-working: #f6c90e;
+  --status-active: #00b4d8;
+  --status-archive: #666666;
+  --status-brainstorm: #9b59b6;
+  --status-reference: #4a90d9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Hide scrollbars but keep scroll functionality */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Custom thin scrollbar for content areas */
+.thin-scrollbar::-webkit-scrollbar { width: 3px; }
+.thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.thin-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Metro typography bleeds */
+.metro-title {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  color: var(--text);
+}
+
+.metro-subtitle {
+  font-size: clamp(0.65rem, 1.2vw, 0.8rem);
+  font-weight: 400;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.accent { color: var(--accent); }
+
+/* Status dot colors */
+.status-dot-canon { background: var(--status-canon); }
+.status-dot-working { background: var(--status-working); }
+.status-dot-active { background: var(--status-active); }
+.status-dot-archive { background: var(--status-archive); }
+.status-dot-brainstorm { background: var(--status-brainstorm); }
+.status-dot-reference { background: var(--status-reference); }
+
+/* Pulse animation for accent elements */
+@keyframes pulse-accent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+mark {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--accent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
