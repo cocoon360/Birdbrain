@@ -298,34 +298,31 @@ export function StartupShell({
               fontFamily: metroFont,
             }}
           >
-            {busy
-              ? mode === 'automatic-cached' && !canEnter
-                ? 'building overview…'
-                : 'working…'
-              : canEnter
-                ? 'enter'
-                : 'build overview'}
+            {busy ? 'working…' : canEnter ? 'enter' : 'build overview'}
           </button>
-          <button
-            type="button"
-            onClick={() => rebuild(true)}
-            disabled={busy}
-            style={{
-              background: 'transparent',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-              padding: '12px 20px',
-              cursor: busy ? 'wait' : 'pointer',
-              fontSize: type.stamp,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              opacity: busy ? 0.7 : 1,
-              fontFamily: metroFont,
-            }}
-          >
-            rebuild overview
-          </button>
+          {canEnter && (
+            <button
+              type="button"
+              onClick={() => rebuild(true)}
+              disabled={busy}
+              title="Force a fresh overview without entering — useful to preview the summary."
+              style={{
+                background: 'transparent',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+                padding: '12px 20px',
+                cursor: busy ? 'wait' : 'pointer',
+                fontSize: type.stamp,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+                opacity: busy ? 0.7 : 1,
+                fontFamily: metroFont,
+              }}
+            >
+              rebuild overview
+            </button>
+          )}
           {message && <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>{message}</span>}
         </div>
       </div>
