@@ -1,51 +1,63 @@
 # Bird Brain
 
-> A living-notebook console for a folder of markdown. Pointed at an archive,
-> it seeds its own concept ontology, lets you walk that ontology as a
-> *Life-is-Strange-style* generative dialogue tree, and — as you click — grows
-> new concepts from what you're attending to.
+> A little local-first console for a folder of markdown. Point it at an
+> archive and it builds its own concept map, then lets you walk that map
+> like a branching dialogue tree in a video game — every generated
+> paragraph is itself clickable, and the tool quietly grows new concepts
+> from whatever you keep clicking on.
 
-Bird Brain is not a chatbot over your docs. The interaction primitive is the
-Twine / LiS conversation tree: every dossier paragraph is itself hypertext,
-every phrase resolves either to a known concept or to a candidate that can
+Bird Brain is not a chatbot over your docs. The interaction primitive is a
+branching dialogue tree: every dossier paragraph is itself hypertext, every
+phrase resolves either to a known concept or to a candidate that can
 promote itself into the ontology. The archive you read becomes a slightly
 different archive because you read it.
 
 ---
 
-## The three purposes
+## Why it exists
 
-Locked from the design notes, in order:
+A weekend itch, really. I had a folder of my own writing I could no longer
+navigate, and I wanted to see if the right tool over it could feel like
+*reading* instead of *searching*. Bird Brain is the result, in three
+compatible readings:
 
 1. **Proof of execution.** A legibly-real stack (Next.js + SQLite + FTS5 +
-   swappable LLM adapter, optional Tauri desktop shell) around a non-obvious
-   product idea, shippable in a 90-second demo.
-2. **A birdbrain for Birdsong (or yours).** A perceptual instrument for the
-   author's own work — a second way to see the archive you already have.
-3. **A general-purpose engine.** Point it at any folder of markdown; it does
-   the same thing for that folder. No Birdsong code in the engine. Birdsong
-   is what emerges when the engine is pointed at Birdsong's folder.
+   swappable LLM adapter, optional Tauri desktop shell) around a
+   non-obvious product idea, shippable in a 90-second demo.
+2. **A notebook for my own writing.** The demo corpus happens to be a
+   creative project of mine — the tool is a second way to see the archive
+   I already have.
+3. **A general-purpose engine.** Point it at any folder of markdown and it
+   does the same thing for that folder. No project-specific code in the
+   engine; the specifics *emerge* when the engine is pointed at a specific
+   folder.
 
-All three collapse into: *build a project-agnostic engine with an automatic
+All three collapse into: *a project-agnostic engine with an automatic
 seeding pass and a participation-driven emergence pipeline*.
 
 ---
 
-## The interaction model (Life is Strange for your archive)
+## The interaction model
 
-| Life is Strange                          | Bird Brain                                         |
-| ---------------------------------------- | -------------------------------------------------- |
-| Opening a scene with Max                 | Opening a project folder                            |
-| Initial dialogue options                 | Seeded concept tiles (derived from the folder)      |
-| Picking a branch → new dialogue          | Clicking a concept → dossier + new hyperlinks       |
-| "Investigate" points in the environment  | Clickable spans inside the generated paragraph      |
-| A choice permanently shifts the scene    | A participation trail grows new concepts            |
-| Max's journal                            | The Datalog panel *(memesis loop, partial today)*   |
+Think branching dialogue trees in a video game — the kind where picking a
+line opens up new things to investigate, and picking *those* shifts the
+state of the scene. Bird Brain is that, but the branches aren't
+pre-authored by a writer; they're generated at read time from whatever's
+in your folder.
 
-Two readers on the same corpus produce different panoramas, because the
-hyperlinks inside a dossier are generated at read time from the corpus, not
-pre-authored. The substrate is stronger than LiS's because the branches are
-emergent rather than pre-authored.
+| In a dialogue-tree game                   | In Bird Brain                                      |
+| ----------------------------------------- | -------------------------------------------------- |
+| Opening a scene                           | Opening a project folder                            |
+| Initial dialogue options                  | Seeded concept tiles (derived from the folder)      |
+| Picking a branch → new dialogue reveals    | Clicking a concept → dossier + new hyperlinks       |
+| "Investigate" points in the environment   | Clickable spans inside the generated paragraph      |
+| A choice permanently shifts the scene     | A participation trail grows new concepts            |
+| The in-game journal                       | The Datalog panel *(memesis loop)*                  |
+
+Two readers on the same corpus end up with different concept panels,
+because the hyperlinks inside a dossier are generated from the corpus, not
+written in advance. The substrate is stronger than a hand-authored
+dialogue tree because the branches are emergent rather than scripted.
 
 ### Umwelten — the perceptual framing
 
@@ -114,8 +126,8 @@ Honest list of remaining gaps against the *living-notebook* vision in
 [`docs/ChatQuote.txt`](docs/ChatQuote.txt):
 
 - **Bridging brief.** When you navigate A → B, B's dossier uses A as quiet
-  peer evidence but does not *write the bridge*. The LiS feeling of "this
-  branch reveals the previous beat from a new angle" is still implicit.
+  peer evidence but does not *write the bridge*. The "this branch reveals
+  the previous beat from a new angle" feeling is still implicit.
 - **No drift radar.** Rising/fading indicators over the concept layer were
   cut as noisy; may return once candidate co-occurrence is richer.
 - **Datalog voice.** Compact status strip + memesis paragraph reads fine but
@@ -131,11 +143,10 @@ Honest list of remaining gaps against the *living-notebook* vision in
 cd app
 npm install
 
-echo 'DOCS_PATH=../your-folder-of-markdown' > .env.local
-echo 'DB_PATH=../data/birdbrain.sqlite'   >> .env.local
+npm run dev        # http://localhost:3000 — pick a workspace folder in the UI
 
-npm run ingest     # walk folder, build SQLite ontology, derive seeded concepts
-npm run dev        # http://localhost:3000
+# Optional CLI ingest (defaults to the tiny tracked fixtures/smoke-corpus/):
+# DOCS_PATH=/absolute/path/to/your/markdown npm run ingest
 ```
 
 For live dossier synthesis, install the Cursor Agent CLI and
@@ -226,19 +237,19 @@ birdbrain/
 
 ---
 
-## Why this is interesting
+## Why it's interesting (to me, anyway)
 
-If it helps to say it in one breath: Bird Brain treats a folder of markdown
-as a playable dialogue tree whose branches are *generated at read time from
-the corpus* and whose ontology *grows from attention*. The engine is
-project-agnostic, local-first, and the AI layer is scoped — it writes
-paragraphs and nothing else; retrieval, ranking, promotion, and the entire
-navigation model are deterministic code you can read.
+In one breath: Bird Brain treats a folder of markdown as a walkable
+dialogue tree whose branches are *generated at read time from the corpus*
+and whose concept set *grows from what you pay attention to*. The engine
+is project-agnostic, local-first, and the AI layer is scoped — it writes
+paragraphs and nothing else; retrieval, ranking, promotion, and the
+navigation model itself are all deterministic code you can read.
 
-It is, on purpose, a tool that becomes a more specific version of itself
-through use. That's the Birdsong theme ("romantic becoming through conscious
-attention") implemented as software. The same machinery that makes it useful
-for a single author's archive makes it re-pointable at any folder.
+The fun part, for me, was that the tool ends up becoming a more specific
+version of itself through use — the concept set after a reading session is
+not the concept set you started with. Same mechanism that makes it useful
+for my own archive makes it re-pointable at anyone's folder.
 
 ---
 
