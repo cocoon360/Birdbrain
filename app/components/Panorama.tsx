@@ -332,7 +332,7 @@ export function Panorama({
           overflowY: 'hidden',
           scrollSnapType: 'x proximity',
           scrollBehavior: 'smooth',
-          paddingTop: 56,
+          paddingTop: 68,
           display: 'flex',
           flexDirection: 'row',
         }}
@@ -348,7 +348,7 @@ export function Panorama({
               flex: '0 0 auto',
               width: 'min(1100px, 92vw)',
               marginRight: i === panels.length - 1 ? 0 : space.lg,
-              height: 'calc(100vh - 56px)',
+              height: 'calc(100vh - 68px)',
               scrollSnapAlign: 'start',
               background: 'var(--bg)',
               borderRight: i === panels.length - 1 ? 'none' : '1px solid var(--border)',

@@ -555,7 +555,7 @@ export function EngineSettingsDrawer({
               <div
                 className="metro-surface"
                 style={{
-                  borderColor: test.ok ? 'color-mix(in srgb, var(--status-canon) 45%, var(--border))' : '#4a1b32',
+                  borderColor: test.ok ? 'var(--status-canon)' : '#4a1b32',
                   padding: '12px 14px',
                   marginBottom: 10,
                 }}
@@ -581,13 +581,11 @@ export function EngineSettingsDrawer({
 function SourcePill({ label, ok }: { label: string; ok: boolean }) {
   return (
     <span
+      className="metro-subtitle"
       style={{
-        padding: '3px 8px',
-        border: `1px solid ${ok ? '#1e4d3a' : '#222'}`,
-        color: ok ? '#00d68f' : '#555',
-        letterSpacing: '0.14em',
-        textTransform: 'uppercase',
-        fontWeight: 700,
+        padding: '4px 8px',
+        border: `1px solid ${ok ? 'var(--status-canon)' : 'var(--border)'}`,
+        color: ok ? 'var(--status-canon)' : 'var(--text-muted)',
       }}
     >
       {label} · {ok ? 'yes' : 'no'}
@@ -596,58 +594,30 @@ function SourcePill({ label, ok }: { label: string; ok: boolean }) {
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: '0.6rem',
-        letterSpacing: '0.18em',
-        color: '#666',
-        textTransform: 'uppercase',
-        fontWeight: 700,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="metro-subtitle" style={{ color: 'var(--text-muted)' }}>{children}</div>;
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#0f0f0f',
-  border: '1px solid #1c1c1c',
-  color: '#eee',
-  padding: '10px 12px',
-  fontSize: '0.82rem',
-  outline: 'none',
-  marginTop: 8,
-};
 
 function primaryButton(disabled: boolean): React.CSSProperties {
   return {
-    background: disabled ? '#1c3a2f' : '#00d68f',
+    fontFamily: metroFont,
+    background: disabled ? 'var(--surface-2)' : 'var(--status-canon)',
     color: '#041015',
-    border: 'none',
-    padding: '10px 14px',
+    border: '1px solid transparent',
+    padding: '10px 16px',
     cursor: disabled ? 'default' : 'pointer',
-    fontSize: '0.64rem',
-    letterSpacing: '0.16em',
+    fontSize: type.stamp,
+    letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontWeight: 700,
-    opacity: disabled ? 0.7 : 1,
+    opacity: disabled ? 0.55 : 1,
+    minHeight: 36,
   };
 }
 
 function secondaryButton(disabled: boolean): React.CSSProperties {
   return {
-    background: 'transparent',
-    color: '#f0f0f0',
-    border: '1px solid #2c2c2c',
-    padding: '10px 14px',
-    cursor: disabled ? 'wait' : 'pointer',
-    fontSize: '0.64rem',
-    letterSpacing: '0.16em',
-    textTransform: 'uppercase',
-    fontWeight: 700,
-    opacity: disabled ? 0.6 : 1,
+    ...chromeButtonStyle({ disabled }),
+    padding: '10px 16px',
+    minHeight: 36,
   };
 }

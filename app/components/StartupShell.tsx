@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDossier } from './DossierContext';
+import { metroFont, space, type } from '@/lib/ui/metro-theme';
 
 export type StartupMode = 'automatic-cached' | 'always-fresh' | 'manual';
 
@@ -137,17 +138,33 @@ export function StartupShell({
         minHeight: '100vh',
         maxHeight: '100vh',
         width: '100vw',
-        background: '#0a0a0a',
-        color: '#f0f0f0',
+        background: 'var(--bg)',
+        color: 'var(--text)',
         display: 'flex',
         alignItems: 'stretch',
         overflowY: 'auto',
+        fontFamily: metroFont,
       }}
       className="thin-scrollbar"
     >
-      <div style={{ width: '58%', padding: '56px 60px 44px', borderRight: '1px solid #151515' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div
+        style={{
+          width: '58%',
+          padding: `${space.xxl + 8}px ${space.hub}px ${space.xxl}px`,
+          borderRight: '1px solid var(--border)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: space.lg,
+            borderBottom: '1px solid var(--border)',
+            paddingBottom: space.sm,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
             <img
               src="/icons/robot-bird-transparent.svg"
               width={40}
@@ -155,22 +172,23 @@ export function StartupShell({
               alt=""
               style={{ display: 'block', flexShrink: 0 }}
             />
-            <div style={{ fontSize: '0.72rem', color: '#00b4d8', letterSpacing: '0.22em', fontWeight: 700 }}>
-              {workspaceName ? `BIRD BRAIN · ${workspaceName.toUpperCase()}` : 'BIRD BRAIN STARTUP'}
+            <div className="metro-subtitle" style={{ color: 'var(--accent)' }}>
+              {workspaceName ? `bird brain · ${workspaceName.toLowerCase()}` : 'bird brain startup'}
             </div>
           </div>
           {onSwitchWorkspace && (
             <button
+              type="button"
               onClick={onSwitchWorkspace}
               style={{
                 background: 'transparent',
-                border: '1px solid #2c2c2c',
-                color: '#888',
-                padding: '6px 10px',
-                fontSize: '0.58rem',
-                letterSpacing: '0.16em',
+                border: '1px solid var(--border)',
+                color: 'var(--text-dim)',
+                padding: '8px 12px',
+                fontSize: type.stamp,
+                letterSpacing: '0.12em',
                 textTransform: 'uppercase',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
               }}
             >
@@ -178,43 +196,51 @@ export function StartupShell({
             </button>
           )}
         </div>
-        <h1 style={{ fontSize: '4.6rem', lineHeight: 0.95, fontWeight: 200, letterSpacing: '-0.04em', margin: 0 }}>
+        <h1 className="metro-title" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)' }}>
           begin
           <br />
           again
         </h1>
-        <p style={{ marginTop: 22, fontSize: '1rem', color: '#bbb', lineHeight: 1.7, maxWidth: 620 }}>
+        <p className="metro-lead" style={{ marginTop: space.lg, maxWidth: 620 }}>
           Bird Brain starts by building an ontology overview of the project. That overview serves
           three jobs at once: it briefs active builders, explains the project to newcomers, and
           demonstrates the product pattern as a reusable project-intelligence console.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginTop: 28 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: space.md,
+            marginTop: space.xl,
+          }}
+        >
           <PurposeCard title="For Builders" body="Clarify what matters now, what changed, and which concepts deserve active attention." />
           <PurposeCard title="For Newcomers" body="Define ideas plainly before assuming any prior familiarity or internal shorthand with this project." />
           <PurposeCard title="For Product" body="Show Bird Brain as a portable way to transform a messy project folder into interactive understanding." />
         </div>
-        <div style={{ marginTop: 34 }}>
-          <div style={{ fontSize: '0.62rem', color: '#666', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 10 }}>
+        <div style={{ marginTop: space.xxl }}>
+          <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
             startup mode
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+          <div className="metro-surface" style={{ padding: 0, overflow: 'hidden' }}>
             {(Object.keys(MODE_COPY) as StartupMode[]).map((key) => (
               <button
                 key={key}
+                type="button"
+                className={`metro-list-row${mode === key ? ' metro-list-row--selected' : ''}`}
                 onClick={() => setMode(key)}
-                style={{
-                  textAlign: 'left',
-                  background: mode === key ? '#101d21' : '#0f0f0f',
-                  border: `1px solid ${mode === key ? '#00b4d8' : '#1c1c1c'}`,
-                  padding: '14px 16px',
-                  cursor: 'pointer',
-                  color: '#ddd',
-                }}
               >
-                <div style={{ fontSize: '0.82rem', color: mode === key ? '#00b4d8' : '#f0f0f0', marginBottom: 6 }}>
+                <div
+                  style={{
+                    fontSize: type.body,
+                    fontWeight: 600,
+                    color: mode === key ? 'var(--accent)' : 'var(--text)',
+                    marginBottom: 6,
+                  }}
+                >
                   {MODE_COPY[key].title}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.5 }}>
                   {MODE_COPY[key].description}
                 </div>
               </button>
@@ -223,25 +249,28 @@ export function StartupShell({
         </div>
       </div>
 
-      <div style={{ flex: 1, padding: '56px 48px 44px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontSize: '0.6rem', color: blocked ? '#e74c9b' : '#00d68f', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 10 }}>
+      <div style={{ flex: 1, padding: `${space.xxl + 8}px ${space.xl}px ${space.xxl}px`, display: 'flex', flexDirection: 'column' }}>
+        <div
+          className="metro-subtitle"
+          style={{ marginBottom: 10, color: blocked ? '#e74c9b' : 'var(--status-canon)' }}
+        >
           {statusLabel}
         </div>
-        <div style={{ fontSize: '1.1rem', color: '#eee', lineHeight: 1.45, marginBottom: 10 }}>
+        <div style={{ fontSize: type.lead, color: 'var(--text)', lineHeight: 1.45, marginBottom: 10 }}>
           {status?.meta.project_name ?? 'Bird Brain'}
         </div>
-        <div style={{ fontSize: '0.78rem', color: '#777', lineHeight: 1.6, marginBottom: 18 }}>
+        <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: space.lg }}>
           {summary ||
             'Bird Brain hasn’t built an overview of this folder yet. Click build overview to run it.'}
         </div>
         {status?.status.latest_run?.error_text && (
-          <div style={{ fontSize: '0.76rem', color: '#e74c9b', lineHeight: 1.6, marginBottom: 18 }}>
+          <div style={{ fontSize: 14, color: '#e74c9b', lineHeight: 1.6, marginBottom: space.lg }}>
             Last ontology error: {status.status.latest_run.error_text}
           </div>
         )}
 
-        <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '16px 18px', marginBottom: 18 }}>
-          <div style={{ fontSize: '0.58rem', color: '#666', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
+        <div className="metro-surface" style={{ padding: '16px 18px', marginBottom: space.lg }}>
+          <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
             startup checks
           </div>
           <ChecklistRow label="Corpus ingested" ok={Boolean(status?.meta.docs_root)} />
@@ -252,19 +281,21 @@ export function StartupShell({
 
         <div style={{ display: 'flex', gap: 10, marginTop: 'auto', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
+            type="button"
             onClick={begin}
             disabled={busy}
             style={{
-              background: canEnter ? '#00d68f' : '#00b4d8',
+              background: canEnter ? 'var(--status-canon)' : 'var(--accent)',
               color: '#041015',
               border: 'none',
-              padding: '12px 18px',
+              padding: '12px 20px',
               cursor: busy ? 'wait' : 'pointer',
-              fontSize: '0.68rem',
-              letterSpacing: '0.16em',
+              fontSize: type.stamp,
+              letterSpacing: '0.12em',
               textTransform: 'uppercase',
               fontWeight: 700,
               opacity: busy ? 0.7 : 1,
+              fontFamily: metroFont,
             }}
           >
             {busy
@@ -276,24 +307,26 @@ export function StartupShell({
                 : 'build overview'}
           </button>
           <button
+            type="button"
             onClick={() => rebuild(true)}
             disabled={busy}
             style={{
               background: 'transparent',
-              color: '#f0f0f0',
-              border: '1px solid #2c2c2c',
-              padding: '12px 18px',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+              padding: '12px 20px',
               cursor: busy ? 'wait' : 'pointer',
-              fontSize: '0.68rem',
-              letterSpacing: '0.16em',
+              fontSize: type.stamp,
+              letterSpacing: '0.12em',
               textTransform: 'uppercase',
               fontWeight: 700,
               opacity: busy ? 0.7 : 1,
+              fontFamily: metroFont,
             }}
           >
             rebuild overview
           </button>
-          {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
+          {message && <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>{message}</span>}
         </div>
       </div>
     </div>
@@ -302,9 +335,9 @@ export function StartupShell({
 
 function PurposeCard({ title, body }: { title: string; body: string }) {
   return (
-    <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '14px 16px' }}>
-      <div style={{ fontSize: '0.74rem', color: '#f0f0f0', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.55 }}>{body}</div>
+    <div className="metro-surface" style={{ padding: '14px 16px' }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.55 }}>{body}</div>
     </div>
   );
 }
@@ -313,8 +346,11 @@ function ChecklistRow({ label, ok, invert = false }: { label: string; ok: boolea
   const pass = invert ? !ok : ok;
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-      <span style={{ fontSize: '0.72rem', color: '#999' }}>{label}</span>
-      <span style={{ fontSize: '0.62rem', color: pass ? '#00d68f' : '#e74c9b', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700 }}>
+      <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>{label}</span>
+      <span
+        className="metro-subtitle"
+        style={{ color: pass ? 'var(--status-canon)' : '#e74c9b' }}
+      >
         {pass ? 'ok' : 'needs work'}
       </span>
     </div>
