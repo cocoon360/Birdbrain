@@ -55,7 +55,8 @@ npm run dev
 ```
 
 Open <http://localhost:3000>. This is the workspace picker. Add a folder of
-markdown files and the app will ingest it into a SQLite database under
+readable files (see the picker copy for extensions; source code is optional)
+and the app will ingest into a SQLite database under
 `~/.birdbrain/workspaces/<id>.db`. Each workspace is isolated.
 
 Useful scripts inside `app/`:
@@ -63,6 +64,7 @@ Useful scripts inside `app/`:
 ```bash
 npm run ingest                          # CLI ingest of the active workspace
 WORKSPACE_FOLDER=/path/to/docs npm run ingest
+INGEST_INCLUDE_CODE=1 npm run ingest   # optional: force code files on (0 = off; omit = use DB)
 npm run build                           # production web build
 npm run start                           # run the production web build
 ```
@@ -80,7 +82,14 @@ from the gear icon in the top chrome. API keys can live in either:
 
 ### 3a. Develop with a live window
 
-From the repo root:
+From the `app/` directory (same as other npm scripts):
+
+```bash
+cd app
+npm run tauri:dev
+```
+
+Or from the repo root:
 
 ```bash
 cd src-tauri
@@ -93,6 +102,15 @@ in `src-tauri/tauri.conf.json`) and opens a native window pointed at
 
 ### 3b. Produce installable bundles
 
+From `app/`:
+
+```bash
+cd app
+npm run tauri:build
+```
+
+Or:
+
 ```bash
 cd src-tauri
 cargo tauri build
@@ -100,8 +118,10 @@ cargo tauri build
 
 This runs `npm run build:sidecar` first, which produces the Next.js
 standalone bundle at `app/.next/standalone/` (including `better-sqlite3`'s
-native addon). Tauri then copies that bundle into the app's `resources/`
-folder and builds a platform-specific installer:
+native addon). `pack-sidecar.mjs` then mirrors that tree into
+`src-tauri/bundle/sidecar/` (outside `app/.next/` so `tauri dev` is not
+constantly invalidated by Turbopack). Tauri bundles `bundle/sidecar` as
+`resources/sidecar` and builds a platform-specific installer:
 
 | Platform | Output                                          |
 | -------- | ----------------------------------------------- |
@@ -202,7 +222,7 @@ birdbrain/
 ├── src-tauri/            # Rust desktop shell
 │   ├── src/commands/     # IPC: folder picker, keychain, open window
 │   ├── src/sidecar.rs    # Spawns node <resource>/sidecar/server.js
-│   └── tauri.conf.json   # Bundles app/.next/standalone as a resource
+│   └── tauri.conf.json   # Bundles bundle/sidecar → resources/sidecar
 └── RUNNING_THE_PROTOTYPE.md   # this file
 ```
 
