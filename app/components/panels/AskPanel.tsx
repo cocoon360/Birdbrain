@@ -30,7 +30,7 @@ function buildExamples(concepts: Concept[]): string[] {
     const bucket = byType.get(type)!;
     if (bucket.length >= 2) examples.push(`List all ${type}s.`);
     if (examples.length >= 4) break;
-    if (bucket[0]) examples.push(`What is the current canon on ${bucket[0].name}?`);
+    if (bucket[0]) examples.push(`What does the corpus say about ${bucket[0].name}?`);
     if (examples.length >= 4) break;
   }
   return examples.slice(0, 4);
@@ -98,9 +98,9 @@ export function AskPanel() {
             lineHeight: 1.5,
           }}
         >
-          Ask anything. Bird Brain retrieves the most relevant canon-weighted chunks first, then
-          either answers deterministically (character lists etc.) or synthesizes with the configured
-          model. Every claim is cited to a real document.
+          Ask anything. Bird Brain pulls the most relevant chunks first (ranking favors primary-folder
+          and in-progress material), then either answers deterministically (typed lists, etc.) or
+          synthesizes with the configured model. Every claim is cited to a real ingested file.
         </p>
       </div>
 

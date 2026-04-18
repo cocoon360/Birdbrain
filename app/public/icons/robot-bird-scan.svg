@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <title>Robot bird scan</title>
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
+  <!-- wing as scanner arc -->
+  <path d="M10 36c6-14 18-22 32-22" stroke="#333" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 36c5-11 15-18 26-18" stroke="#00b4d8" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 6"/>
+  <path d="M36 16l12-8 3 12-10 6c1 3 2 7 2 11H22" stroke="#2a2a2a" stroke-width="1.5" fill="#111"/>
+  <path d="M40 18l8-5 2 8-7 4" stroke="#00b4d8" stroke-width="2" stroke-linejoin="round" fill="#0d0d0d"/>
+  <circle cx="30" cy="24" r="5" stroke="#00b4d8" stroke-width="2" fill="#0a0a0a"/>
+  <rect x="28" y="22" width="4" height="1.5" rx="0.5" fill="#00b4d8" opacity="0.9"/>
+  <path d="M35 24h9l-3 4-6-2" stroke="#e8e8e8" stroke-width="2" stroke-linejoin="round" fill="#161616"/>
+  <circle cx="48" cy="40" r="9" stroke="#444" stroke-width="1.5"/>
+  <path d="M44 40h8M48 36v8" stroke="#00b4d8" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -122,10 +122,37 @@ export function FolderBrowserDialog({
             >
               BROWSE FOLDERS
             </div>
-            <div style={{ fontSize: '0.76rem', color: '#777', marginTop: 4, maxWidth: 440, lineHeight: 1.5 }}>
+            <div style={{ fontSize: '0.76rem', color: '#777', marginTop: 4, maxWidth: 480, lineHeight: 1.5 }}>
               Navigate to the folder on top. Add optional project context on the bottom. Hit{' '}
               <span style={{ color: '#00d68f' }}>use this folder</span> and Bird Brain starts
               ingesting.
+            </div>
+            <div
+              style={{
+                fontSize: '0.62rem',
+                color: '#4a5157',
+                marginTop: 6,
+                lineHeight: 1.5,
+                maxWidth: 480,
+              }}
+            >
+              Reads{' '}
+              <code style={{ color: '#7a8288' }}>.md</code>{' '}
+              <code style={{ color: '#7a8288' }}>.txt</code>{' '}
+              <code style={{ color: '#7a8288' }}>.rst</code>{' '}
+              <code style={{ color: '#7a8288' }}>.org</code>{' '}
+              <code style={{ color: '#7a8288' }}>.adoc</code>{' '}
+              <code style={{ color: '#7a8288' }}>.json</code>{' '}
+              <code style={{ color: '#7a8288' }}>.yaml</code>{' '}
+              <code style={{ color: '#7a8288' }}>.csv</code>{' '}
+              <code style={{ color: '#7a8288' }}>.log</code>{' '}
+              <code style={{ color: '#7a8288' }}>.toml</code>{' '}
+              <code style={{ color: '#7a8288' }}>.ini</code>{' '}
+              <code style={{ color: '#7a8288' }}>.html</code>{' '}
+              <code style={{ color: '#7a8288' }}>.htm</code>{' '}
+              <code style={{ color: '#7a8288' }}>.xml</code>{' '}
+              <code style={{ color: '#7a8288' }}>.svg</code>. Skips{' '}
+              <code style={{ color: '#7a8288' }}>node_modules</code>, build folders, and dot-folders.
             </div>
           </div>
           <button

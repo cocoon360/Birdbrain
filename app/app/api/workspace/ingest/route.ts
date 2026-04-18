@@ -9,6 +9,8 @@ interface IngestBody {
   workspace_id: string;
   docs_path?: string;
   user_guidance?: string;
+  /** When true, also ingest common source-code extensions (opt-in per workspace). */
+  include_code?: boolean;
 }
 
 // Runs a markdown ingestion into the given workspace's SQLite file. The
@@ -30,10 +32,12 @@ export async function POST(req: NextRequest) {
   }
   const docsPath = body.docs_path?.trim() || workspace.folder_path;
   const userGuidance = body.user_guidance?.trim() || undefined;
+  const includeCode =
+    typeof body.include_code === 'boolean' ? body.include_code : undefined;
 
   try {
     const stats = await withWorkspaceId(workspace.id, () =>
-      runIngestion(docsPath, { userGuidance })
+      runIngestion(docsPath, { userGuidance, includeCode })
     );
     return NextResponse.json({ ok: true, stats, docs_path: docsPath });
   } catch (err) {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BriefView, type BriefPayload } from '../BriefView';
 import { useDossier } from '../DossierContext';
+import { documentStatusBadgeLabel } from '@/lib/ui/semantic';
 
 interface SearchResult {
   chunk_id: number;
@@ -10,9 +11,26 @@ interface SearchResult {
   doc_title: string;
   doc_path: string;
   doc_status: string;
+  doc_source_kind?: string;
   heading: string | null;
   snippet: string;
 }
+
+const KIND_LABEL: Record<string, string> = {
+  markdown: 'MD',
+  text: 'TXT',
+  svg: 'SVG',
+  html: 'HTML',
+  code: 'CODE',
+};
+
+const KIND_COLOR: Record<string, string> = {
+  markdown: '#00b4d8',
+  text: '#e7b24c',
+  svg: '#b48cff',
+  html: '#f06292',
+  code: '#7cb342',
+};
 
 interface Concept {
   slug: string;
@@ -46,7 +64,7 @@ function buildExamples(concepts: Concept[]): string[] {
     const bucket = byType.get(type)!;
     if (bucket.length >= 2) examples.push(`List all ${type}s.`);
     if (examples.length >= 4) break;
-    if (bucket[0]) examples.push(`What is the current canon on ${bucket[0].name}?`);
+    if (bucket[0]) examples.push(`What does the corpus say about ${bucket[0].name}?`);
     if (examples.length >= 4) break;
   }
   return examples.slice(0, 4);
@@ -154,9 +172,9 @@ export function WorkbenchPanel() {
             lineHeight: 1.5,
           }}
         >
-          Use the top bar for direct archive retrieval and the second bar for Bird Brain questions.
-          Search stays deterministic; asking retrieves evidence first, then synthesizes or returns a
-          grounded fallback.
+          Use the top bar for full-text retrieval over ingested files and the second bar for
+          Bird Brain questions. Search stays deterministic; asking pulls evidence first, then
+          synthesizes or returns a grounded fallback.
         </p>
       </div>
 
@@ -197,7 +215,7 @@ export function WorkbenchPanel() {
                   fontWeight: 600,
                 }}
               >
-                {status || 'all'}
+                {documentStatusBadgeLabel(status)}
               </button>
             ))}
           </div>
@@ -279,12 +297,17 @@ export function WorkbenchPanel() {
           )}
           {!searchQuery.trim() && (
             <div style={{ color: '#333', fontSize: '0.78rem' }}>
-              Start typing. Results rank canon and working material above older archive context.
+              Start typing. Ranking favors primary-folder and in-progress documents over reference,
+              exploratory, and older paths. Folder names map each file to a status bucket.
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {searchResults.map((r) => {
               const color = STATUS_COLOR[r.doc_status] ?? '#666';
+              const kind = r.doc_source_kind ?? 'markdown';
+              const showKindPill = kind !== 'markdown';
+              const kindLabel = KIND_LABEL[kind] ?? kind.toUpperCase();
+              const kindColor = KIND_COLOR[kind] ?? '#888';
               return (
                 <button
                   key={r.chunk_id}
@@ -308,10 +331,27 @@ export function WorkbenchPanel() {
                       flexWrap: 'wrap',
                     }}
                   >
+                    {showKindPill && (
+                      <span
+                        style={{
+                          fontSize: '0.56rem',
+                          letterSpacing: '0.14em',
+                          textTransform: 'uppercase',
+                          color: kindColor,
+                          border: `1px solid ${kindColor}44`,
+                          padding: '2px 6px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {kindLabel}
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.82rem', fontWeight: 500, color: '#eee' }}>
                       {r.doc_title}
                     </span>
-                    {r.heading && <span style={{ fontSize: '0.7rem', color: '#555' }}>§ {r.heading}</span>}
+                    {r.heading && (
+                      <span style={{ fontSize: '0.7rem', color: '#555' }}>· {r.heading}</span>
+                    )}
                     <span
                       style={{
                         marginLeft: 'auto',
@@ -321,7 +361,7 @@ export function WorkbenchPanel() {
                         color,
                       }}
                     >
-                      {r.doc_status}
+                      {documentStatusBadgeLabel(r.doc_status)}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.76rem', color: '#aaa', lineHeight: 1.55 }}>
@@ -340,7 +380,7 @@ export function WorkbenchPanel() {
             <div style={{ color: '#2a2a2a', fontSize: '0.85rem', lineHeight: 1.8, marginTop: 20 }}>
               <div style={{ color: '#444' }}>Ready.</div>
               <div style={{ fontSize: '0.72rem', color: '#333', marginTop: 6 }}>
-                Ask for current canon, active changes, or lists of concepts.
+                Try summaries, comparisons, or &quot;list all …&quot; style questions grounded in your files.
               </div>
             </div>
           )}

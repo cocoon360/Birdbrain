@@ -132,7 +132,7 @@ function renderListFallback(type: string, rows: EntityRow[]): string {
   );
   const pool = significant.length >= 3 ? significant : sorted.slice(0, 20);
 
-  const heading = `**${pool.length} ${type}${pool.length === 1 ? '' : 's'} in the archive:**`;
+  const heading = `**${pool.length} ${type}${pool.length === 1 ? '' : 's'} in this workspace:**`;
   const lines = pool.map(
     (e) => `- **${e.name}** — \`${e.slug}\` · ${e.mention_count} mentions across ${e.document_count} docs`
   );
@@ -213,10 +213,10 @@ function gatherEvidence(body: BriefBody): {
 }
 
 function renderEvidenceAsMarkdown(evidence: BriefEvidence[]): string {
-  if (!evidence.length) return '_No evidence found in the archive for this query._';
+  if (!evidence.length) return '_No evidence found in ingested files for this query._';
   return evidence
     .map((ev, i) => {
-      const head = ev.heading ? ` § ${ev.heading}` : '';
+      const head = ev.heading ? ` · ${ev.heading}` : '';
       const status = `\`${ev.status}\``;
       return `**[${i + 1}] ${ev.title}**${head}  \n${status} — \`${ev.path}\`\n\n> ${ev.snippet}`;
     })
@@ -233,13 +233,13 @@ function renderFallbackBrief(
     ? `# Dossier: ${slug}`
     : query
       ? `# Brief for: ${query}`
-      : `# Active-Work Brief`;
+      : `# Workspace brief`;
 
   const answerBlock = fallbackAnswer
     ? `## Answer (deterministic)\n\n${fallbackAnswer}\n\n`
     : '';
 
-  const evidenceBlock = `## Evidence from the archive\n\n${renderEvidenceAsMarkdown(evidence)}\n`;
+  const evidenceBlock = `## Evidence from ingested files\n\n${renderEvidenceAsMarkdown(evidence)}\n`;
 
   const footer =
     '\n\n---\n_Bird Brain returned evidence without calling the configured engine. Open Settings → Engine to verify the provider, model, and API key._';
@@ -250,7 +250,7 @@ function renderFallbackBrief(
 function buildPromptContext(evidence: BriefEvidence[]): string {
   return evidence
     .map((ev, i) => {
-      const head = ev.heading ? ` § ${ev.heading}` : '';
+      const head = ev.heading ? ` · ${ev.heading}` : '';
       return `[${i + 1}] ${ev.title}${head} (${ev.status}) — ${ev.path}\n${ev.snippet}`;
     })
     .join('\n\n');
@@ -260,7 +260,7 @@ const SYSTEM_PROMPT = `You are Bird Brain, a project intelligence assistant.
 Rules:
 - Ground every claim in the numbered evidence snippets provided.
 - When you use a snippet, cite it inline like [1], [2], matching the snippet numbers.
-- Favor canon and working snippets over archive/brainstorm; flag it if canon is missing.
+- Favor snippets from primary-folder and in-progress documents over older or exploratory material; note when primary-path evidence is missing.
 - If the evidence cannot answer the question, say so and point to what IS known.
 - Be concise. Structure the answer with short sections or bullet lists.
 - Never invent facts that are not in the evidence.`;

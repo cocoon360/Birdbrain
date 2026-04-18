@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <title>Robot bird mesh</title>
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
+  <!-- graph nodes behind -->
+  <circle cx="14" cy="18" r="2" fill="#00b4d8" opacity="0.35"/>
+  <circle cx="22" cy="12" r="2" fill="#00b4d8" opacity="0.2"/>
+  <circle cx="10" cy="28" r="2" fill="#666" opacity="0.5"/>
+  <path d="M14 18l8-6M14 18l-4 10M22 12l-12 16" stroke="#333" stroke-width="1"/>
+  <path d="M16 40c4-10 14-17 24-17l7-5 2 9-5 3c2 3 3 7 3 11H16z" stroke="#2a2a2a" stroke-width="1.5" fill="#121212"/>
+  <path d="M38 22l9-6 2 9-7 4" stroke="#00b4d8" stroke-width="2" stroke-linejoin="round" fill="#0e0e0e"/>
+  <circle cx="28" cy="26" r="5" stroke="#00b4d8" stroke-width="2" fill="#0a0a0a"/>
+  <path d="M27 25h3v2h-3z" fill="#00b4d8"/>
+  <path d="M33 26h10l-4 4-6-1" stroke="#ddd" stroke-width="2" stroke-linejoin="round" fill="#181818"/>
+  <circle cx="50" cy="44" r="3" stroke="#00b4d8" stroke-width="1.5" fill="#111"/>
+  <path d="M42 38l8 6" stroke="#444" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

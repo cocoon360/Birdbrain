@@ -6,6 +6,8 @@
  *   DOCS_PATH=/path/to/docs npm run ingest
  *   WORKSPACE_ID=ws_xxx npm run ingest                  # use an existing workspace
  *   WORKSPACE_FOLDER=/path/to/folder npm run ingest     # pick / create workspace by folder
+ *   INGEST_INCLUDE_CODE=1 npm run ingest                 # force code-file ingest on (0 = off)
+ *   Omit INGEST_INCLUDE_CODE to use the value stored in the workspace DB.
  */
 
 import path from 'path';
@@ -54,7 +56,14 @@ async function main() {
   console.log(`Docs root: ${docsPath}`);
   console.log(`DB path:   ${workspace.db_path}`);
 
-  const stats = await withWorkspaceId(workspace.id, () => runIngestion(docsPath));
+  const envIc = process.env.INGEST_INCLUDE_CODE?.trim();
+  let includeCodeOpt: boolean | undefined;
+  if (envIc === '1' || envIc?.toLowerCase() === 'true') includeCodeOpt = true;
+  else if (envIc === '0' || envIc?.toLowerCase() === 'false') includeCodeOpt = false;
+
+  const stats = await withWorkspaceId(workspace.id, () =>
+    runIngestion(docsPath, { includeCode: includeCodeOpt })
+  );
 
   console.log('');
   console.log('Ingestion complete:');

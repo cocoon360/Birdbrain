@@ -3,13 +3,13 @@
 :root {
   --accent: #00b4d8;
   --accent-dim: #0096b7;
-  --bg: #0a0a0a;
-  --surface: #111111;
-  --surface-2: #1a1a1a;
-  --border: #222222;
-  --text: #f0f0f0;
-  --text-dim: #888888;
-  --text-muted: #444444;
+  --bg: #060606;
+  --surface: #0e0e0e;
+  --surface-2: #141414;
+  --border: #1e1e1e;
+  --text: #f2f2f2;
+  --text-dim: #8a8a8a;
+  --text-muted: #4a4a4a;
 
   --status-canon: #00d68f;
   --status-working: #f6c90e;
@@ -17,6 +17,13 @@
   --status-archive: #666666;
   --status-brainstorm: #9b59b6;
   --status-reference: #4a90d9;
+
+  /* Metro rhythm — two radii only */
+  --metro-radius: 0px;
+  --metro-radius-input: 0px;
+  --metro-page-pad-x: 32px;
+  --metro-page-pad-y: 28px;
+  --metro-chrome-h: 52px;
 }
 
 * {
@@ -26,9 +33,20 @@
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+  font-family:
+    'Segoe UI',
+    'Segoe UI Web (West European)',
+    Segoe UI,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 400;
   height: 100%;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Hide scrollbars but keep scroll functionality */
@@ -40,21 +58,106 @@ html, body {
 .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .thin-scrollbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-/* Metro typography bleeds */
+/* Hub / pivot pages — flat plane, consistent margins */
+.metro-panel {
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--metro-page-pad-y) var(--metro-page-pad-x) 40px;
+}
+
+/* Metro typography — light display head + stamped subtitle */
 .metro-title {
-  font-size: clamp(2.5rem, 6vw, 5rem);
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 0.95;
+  font-size: clamp(2.25rem, 5vw, 3.75rem);
+  font-weight: 200;
+  letter-spacing: -0.03em;
+  line-height: 0.92;
   color: var(--text);
+  margin: 0;
 }
 
 .metro-subtitle {
-  font-size: clamp(0.65rem, 1.2vw, 0.8rem);
-  font-weight: 400;
-  letter-spacing: 0.15em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+.metro-lead {
+  margin-top: 12px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-dim);
+  line-height: 1.55;
+  max-width: 36rem;
+}
+
+/* Flat stat tile — no card-on-card rounding */
+.metro-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: var(--metro-radius);
+}
+
+.metro-surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--metro-radius);
+}
+
+.metro-list-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 14px 16px 14px 14px;
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 150ms ease-out, background 150ms ease-out;
+}
+
+.metro-list-row:hover {
+  background: var(--surface-2);
+}
+
+.metro-list-row--selected {
+  box-shadow: inset 4px 0 0 0 var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.metro-drawer-title {
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 200;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.metro-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.35;
+  outline: none;
+  border-radius: var(--metro-radius-input);
+  font-family: inherit;
+}
+
+.metro-input:focus {
+  border-color: var(--accent);
+}
+
+select.metro-input {
+  cursor: pointer;
 }
 
 .accent { color: var(--accent); }
@@ -74,8 +177,8 @@ html, body {
 }
 
 mark {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--accent);
-  border-radius: 2px;
-  padding: 0 1px;
+  border-radius: var(--metro-radius);
+  padding: 0 2px;
 }

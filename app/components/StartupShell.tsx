@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDossier } from './DossierContext';
 
 export type StartupMode = 'automatic-cached' | 'always-fresh' | 'manual';
@@ -61,21 +61,10 @@ export function StartupShell({
   const [lastStatusLoadedAt, setLastStatusLoadedAt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     refreshStatus();
   }, []);
-
-  useEffect(() => {
-    if (autoStartedRef.current) return;
-    if (!status) return;
-    if (mode !== 'automatic-cached') return;
-    if (busy) return;
-    if (status.status.failed) return;
-    autoStartedRef.current = true;
-    void begin();
-  }, [status, mode, busy]);
 
   const canEnter = Boolean(status?.status.ready);
   const blocked = Boolean(status && !status.status.ready);
@@ -146,17 +135,29 @@ export function StartupShell({
     <div
       style={{
         minHeight: '100vh',
+        maxHeight: '100vh',
         width: '100vw',
         background: '#0a0a0a',
         color: '#f0f0f0',
         display: 'flex',
         alignItems: 'stretch',
+        overflowY: 'auto',
       }}
+      className="thin-scrollbar"
     >
       <div style={{ width: '58%', padding: '56px 60px 44px', borderRight: '1px solid #151515' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 18 }}>
-          <div style={{ fontSize: '0.72rem', color: '#00b4d8', letterSpacing: '0.22em', fontWeight: 700 }}>
-            {workspaceName ? `BIRD BRAIN · ${workspaceName.toUpperCase()}` : 'BIRD BRAIN STARTUP'}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <img
+              src="/icons/robot-bird-transparent.svg"
+              width={40}
+              height={40}
+              alt=""
+              style={{ display: 'block', flexShrink: 0 }}
+            />
+            <div style={{ fontSize: '0.72rem', color: '#00b4d8', letterSpacing: '0.22em', fontWeight: 700 }}>
+              {workspaceName ? `BIRD BRAIN · ${workspaceName.toUpperCase()}` : 'BIRD BRAIN STARTUP'}
+            </div>
           </div>
           {onSwitchWorkspace && (
             <button
@@ -190,7 +191,7 @@ export function StartupShell({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginTop: 28 }}>
           <PurposeCard title="For Builders" body="Clarify what matters now, what changed, and which concepts deserve active attention." />
           <PurposeCard title="For Newcomers" body="Define ideas plainly before assuming any prior familiarity or internal shorthand with this project." />
-          <PurposeCard title="For Product" body="Show Bird Brain as a portable way to transform a messy archive into interactive project understanding." />
+          <PurposeCard title="For Product" body="Show Bird Brain as a portable way to transform a messy project folder into interactive understanding." />
         </div>
         <div style={{ marginTop: 34 }}>
           <div style={{ fontSize: '0.62rem', color: '#666', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 10 }}>

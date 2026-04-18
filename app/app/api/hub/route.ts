@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 import {
-  getAlerts,
   getCorpusStats,
-  getTimeline,
-  getCanonDocuments,
   getProjectMeta,
   getEmergedEntities,
-  getQueueStats,
   getStarterLensConcepts,
   getStartupStatus,
 } from '@/lib/db/queries';
@@ -17,15 +13,17 @@ export async function GET(req: Request) {
     const startup = getStartupStatus();
     return NextResponse.json({
       workspace: { id: ctx.id, name: ctx.name, folder_path: ctx.folder_path },
-      startup,
+      startup: {
+        ready: startup.ready,
+        stale: startup.stale,
+        missing: startup.missing,
+        failed: startup.failed,
+        summary_text: startup.latest_run?.summary_text ?? null,
+      },
       meta: getProjectMeta(),
       stats: getCorpusStats(),
       concepts: startup.ready ? getStarterLensConcepts(9) : [],
       emerged: startup.ready ? getEmergedEntities(8) : [],
-      queue: getQueueStats('queued'),
-      alerts: startup.ready ? getAlerts(8) : [],
-      recent: getTimeline(10),
-      canon: getCanonDocuments().slice(0, 10),
     });
   });
 }

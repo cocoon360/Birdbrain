@@ -28,6 +28,44 @@ export const MODE_COLORS: Record<'live' | 'queued', string> = {
   queued: '#f6c90e',
 };
 
+/**
+ * Human-readable names for `documents.status` (inferred from folder paths like
+ * `canon/`, `working/`, etc.). Internal DB values stay unchanged; this is only
+ * for UI copy so the app does not read like a fiction writers' room.
+ */
+export function documentStatusBadgeLabel(raw: string): string {
+  const s = (raw || '').toLowerCase();
+  if (s === '') return 'ALL';
+  const map: Record<string, string> = {
+    canon: 'PRIMARY',
+    working: 'IN PROGRESS',
+    active: 'ACTIVE',
+    reference: 'REFERENCE',
+    brainstorm: 'EXPLORATORY',
+    archive: 'OLDER',
+    general: 'GENERAL',
+    unknown: 'OTHER',
+  };
+  return map[s] ?? (raw ? raw.toUpperCase() : 'OTHER');
+}
+
+/** Sentence-case label for inline helper text (not all-caps). */
+export function documentStatusUiLabel(raw: string): string {
+  const s = (raw || '').toLowerCase();
+  if (s === '') return 'all';
+  const map: Record<string, string> = {
+    canon: 'primary',
+    working: 'in progress',
+    active: 'active',
+    reference: 'reference',
+    brainstorm: 'exploratory',
+    archive: 'older',
+    general: 'general',
+    unknown: 'unclassified',
+  };
+  return map[s] ?? raw;
+}
+
 export const BRANCH_COLORS = {
   new: '#e74c9b',
   active: '#00b4d8',

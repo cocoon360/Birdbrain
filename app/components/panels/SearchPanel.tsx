@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDossier } from '../DossierContext';
+import { documentStatusBadgeLabel } from '@/lib/ui/semantic';
 
 interface SearchResult {
   chunk_id: number;
@@ -99,7 +100,7 @@ export function SearchPanel() {
           }}
         />
         <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {['', 'canon', 'working', 'reference', 'brainstorm', 'archive'].map((s) => (
+          {['', 'canon', 'working', 'active', 'reference', 'brainstorm', 'archive'].map((s) => (
             <button
               key={s || 'all'}
               onClick={() => setStatus(s)}
@@ -115,7 +116,7 @@ export function SearchPanel() {
                 fontWeight: 600,
               }}
             >
-              {s || 'all'}
+              {documentStatusBadgeLabel(s)}
             </button>
           ))}
         </div>
@@ -135,7 +136,8 @@ export function SearchPanel() {
         )}
         {!query.trim() && (
           <div style={{ color: '#333', fontSize: '0.78rem' }}>
-            Start typing. Results rank canon higher than working higher than archive.
+            Start typing. Ranking favors primary-folder and in-progress files, then active and
+            reference, then exploratory and older material.
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -168,7 +170,7 @@ export function SearchPanel() {
                     {r.doc_title}
                   </span>
                   {r.heading && (
-                    <span style={{ fontSize: '0.7rem', color: '#555' }}>§ {r.heading}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#555' }}>· {r.heading}</span>
                   )}
                   <span
                     style={{
@@ -179,7 +181,7 @@ export function SearchPanel() {
                       color,
                     }}
                   >
-                    {r.doc_status}
+                    {documentStatusBadgeLabel(r.doc_status)}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.76rem', color: '#aaa', lineHeight: 1.55 }}>

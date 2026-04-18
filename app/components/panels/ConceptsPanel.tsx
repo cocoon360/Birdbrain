@@ -67,8 +67,8 @@ export function ConceptsPanel() {
             lineHeight: 1.5,
           }}
         >
-          Every named concept detected across the archive. Click any tile to open its dossier: canon
-          snapshot, working drift, archive history, related concepts.
+          Every named concept detected across ingested files. Click a tile to open its dossier:
+          primary-path mentions, in-progress overlap, older supporting material, and related concepts.
         </p>
       </div>
 

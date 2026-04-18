@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <title>Robot bird pulse</title>
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
+  <circle cx="32" cy="32" r="22" stroke="#00b4d8" stroke-width="1" opacity="0.25"/>
+  <circle cx="32" cy="32" r="16" stroke="#00b4d8" stroke-width="1" opacity="0.4"/>
+  <path d="M14 42c5-12 16-20 28-20l7-5 2 8-6 4c2 4 3 8 3 13H14z" stroke="#2a2a2a" stroke-width="1.5" fill="#101010"/>
+  <path d="M38 24l10-7 3 10-8 5" stroke="#00b4d8" stroke-width="2" stroke-linejoin="round" fill="#0c0c0c"/>
+  <circle cx="28" cy="28" r="5" stroke="#00b4d8" stroke-width="2" fill="#0a0a0a"/>
+  <circle cx="28" cy="28" r="2" stroke="#00b4d8" stroke-width="1.2" fill="none" opacity="0.7"/>
+  <path d="M33 28h10l-4 4-6-1" stroke="#e8e8e8" stroke-width="2" stroke-linejoin="round" fill="#161616"/>
+  <!-- signal bars tail -->
+  <path d="M8 46v-4M11 46v-7M14 46v-10" stroke="#00b4d8" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+</svg>

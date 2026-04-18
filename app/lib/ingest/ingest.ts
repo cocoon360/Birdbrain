@@ -1,6 +1,12 @@
 import path from 'path';
 import { getDb } from '../db/database';
-import { parseMarkdownFile, walkMarkdownFiles, type ParsedDocument } from './parse';
+import {
+  parseIngestableFile,
+  walkIngestableFiles,
+  type IngestableFile,
+  type ParsedDocument,
+  type SourceKind,
+} from './parse';
 import { loadProjectGuidance, splitGuidanceFiles } from './project-guidance';
 
 function deriveProjectName(docsRoot: string): string {
@@ -22,10 +28,27 @@ interface IngestStats {
   total: number;
   entities_seeded: number;
   mentions_recorded: number;
+  by_kind: Record<SourceKind, number>;
 }
+
+const ZERO_BY_KIND: Record<SourceKind, number> = {
+  markdown: 0,
+  text: 0,
+  svg: 0,
+  html: 0,
+  code: 0,
+};
 
 export interface RunIngestionOptions {
   userGuidance?: string;
+  /** When set, overrides `project_meta.ingest_include_code` for this run and persists the choice. */
+  includeCode?: boolean;
+}
+
+function parseBoolMeta(v: string | undefined): boolean {
+  if (!v) return false;
+  const s = v.trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes';
 }
 
 export function runIngestion(
@@ -41,13 +64,46 @@ export function runIngestion(
     total: 0,
     entities_seeded: 0,
     mentions_recorded: 0,
+    by_kind: { ...ZERO_BY_KIND },
   };
 
-  const files = walkMarkdownFiles(docsRoot);
-  const { guidance: guidanceFiles, content: contentFiles } = splitGuidanceFiles(files, docsRoot);
+  const storedInclude = db
+    .prepare(`SELECT value FROM project_meta WHERE key = 'ingest_include_code'`)
+    .get() as { value: string } | undefined;
+  const includeCode =
+    options.includeCode !== undefined
+      ? Boolean(options.includeCode)
+      : parseBoolMeta(storedInclude?.value);
+
+  db.prepare(
+    `INSERT INTO project_meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).run('ingest_include_code', includeCode ? 'true' : 'false');
+
+  const files = walkIngestableFiles(docsRoot, { includeCode });
+  // Guidance files are always markdown/text by nature; we pass absolute paths
+  // through so splitGuidanceFiles can inspect filenames. We only split against
+  // the markdown + text set because SVGs are never guidance files.
+  const markdownAndTextPaths = files
+    .filter((f) => f.kind === 'markdown' || f.kind === 'text')
+    .map((f) => f.path);
+  const { guidance: guidanceFiles } = splitGuidanceFiles(markdownAndTextPaths, docsRoot);
+  const guidanceSet = new Set(guidanceFiles);
+  const contentFiles: IngestableFile[] = files.filter((f) => !guidanceSet.has(f.path));
   const guidance = loadProjectGuidance(guidanceFiles, docsRoot);
+
   stats.total = contentFiles.length;
-  console.log(`Found ${contentFiles.length} markdown files in ${docsRoot}`);
+  for (const file of contentFiles) stats.by_kind[file.kind] += 1;
+
+  const kindSummary = (Object.entries(stats.by_kind) as Array<[SourceKind, number]>)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${n} ${k}`)
+    .join(' · ');
+  console.log(
+    `Found ${contentFiles.length} ingestable files in ${docsRoot}` +
+      (kindSummary ? ` (${kindSummary})` : '') +
+      ` · include_code=${includeCode}`
+  );
   if (guidance.source_files.length) {
     console.log(`Loaded ${guidance.source_files.length} guidance file(s): ${guidance.source_files.join(', ')}`);
   }
@@ -56,9 +112,9 @@ export function runIngestion(
   const parsed: ParsedDocument[] = [];
   for (const file of contentFiles) {
     try {
-      parsed.push(parseMarkdownFile(file, docsRoot));
+      parsed.push(parseIngestableFile(file, docsRoot));
     } catch (err) {
-      console.error(`Error parsing ${file}:`, err);
+      console.error(`Error parsing ${file.path}:`, err);
     }
   }
 
@@ -68,15 +124,23 @@ export function runIngestion(
   );
 
   const upsertDoc = db.prepare(`
-    INSERT INTO documents (path, title, status, category, word_count, file_mtime, ingested_at)
-    VALUES (@path, @title, @status, @category, @word_count, @file_mtime, @ingested_at)
+    INSERT INTO documents (
+      path, title, status, category, word_count, file_mtime, ingested_at,
+      source_kind, source_ext
+    )
+    VALUES (
+      @path, @title, @status, @category, @word_count, @file_mtime, @ingested_at,
+      @source_kind, @source_ext
+    )
     ON CONFLICT(path) DO UPDATE SET
       title = excluded.title,
       status = excluded.status,
       category = excluded.category,
       word_count = excluded.word_count,
       file_mtime = excluded.file_mtime,
-      ingested_at = excluded.ingested_at
+      ingested_at = excluded.ingested_at,
+      source_kind = excluded.source_kind,
+      source_ext = excluded.source_ext
   `);
 
   const getDocId = db.prepare('SELECT id FROM documents WHERE path = ?');
@@ -101,6 +165,8 @@ export function runIngestion(
       word_count: doc.word_count,
       file_mtime: doc.file_mtime,
       ingested_at: now,
+      source_kind: doc.source_kind,
+      source_ext: doc.source_ext,
     });
 
     const docRow = getDocId.get(doc.file_path) as { id: number } | undefined;

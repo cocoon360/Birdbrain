@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { useDossier } from './DossierContext';
+import { documentStatusBadgeLabel } from '@/lib/ui/semantic';
 
 export interface BriefEvidence {
   doc_id: number;
@@ -293,7 +294,7 @@ export function BriefView({ payload }: BriefViewProps) {
                       {ev.title}
                     </button>
                     {ev.heading && (
-                      <span style={{ fontSize: '0.7rem', color: '#555' }}>§ {ev.heading}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#555' }}>· {ev.heading}</span>
                     )}
                     <span
                       style={{
@@ -304,7 +305,7 @@ export function BriefView({ payload }: BriefViewProps) {
                         textTransform: 'uppercase',
                       }}
                     >
-                      {ev.status}
+                      {documentStatusBadgeLabel(ev.status)}
                     </span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#aaa', lineHeight: 1.55 }}>

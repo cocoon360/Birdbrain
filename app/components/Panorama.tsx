@@ -3,6 +3,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useDossier } from './DossierContext';
 import { EngineSettingsDrawer } from './EngineSettingsDrawer';
+import {
+  chrome,
+  chromeButtonStyle,
+  metroFont,
+  pivotItemStyle,
+  segmentedItemStyle,
+  space,
+  type,
+} from '@/lib/ui/metro-theme';
 
 export interface PanoramaPanel {
   id: string;
@@ -134,92 +143,6 @@ export function Panorama({
     return () => el.removeEventListener('wheel', handleWheel);
   }, [panels, wheelScroll]);
 
-  // Click-and-drag to scroll the panorama. Independent of the wheel toggle:
-  // even if wheel is locked, a user can still grab the backdrop and drag to
-  // another tab. We use a small distance threshold so ordinary clicks on
-  // text / buttons still work, and we bail out entirely if the mousedown is
-  // on an interactive element or inside an input/textarea so text selection
-  // in dossiers isn't trampled.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const DRAG_THRESHOLD = 6;
-
-    function isDraggableTarget(target: EventTarget | null): boolean {
-      if (!(target instanceof Element)) return false;
-      if (
-        target.closest(
-          'button, a, input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="button"]'
-        )
-      ) {
-        return false;
-      }
-      return true;
-    }
-
-    let pointerId: number | null = null;
-    let startX = 0;
-    let startScroll = 0;
-    let dragging = false;
-
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      if (!isDraggableTarget(event.target)) return;
-      pointerId = event.pointerId;
-      startX = event.clientX;
-      startScroll = el.scrollLeft;
-      dragging = false;
-    };
-
-    const onPointerMove = (event: PointerEvent) => {
-      if (pointerId === null || event.pointerId !== pointerId) return;
-      const dx = event.clientX - startX;
-      if (!dragging) {
-        if (Math.abs(dx) < DRAG_THRESHOLD) return;
-        dragging = true;
-        try {
-          el.setPointerCapture(pointerId);
-        } catch {
-          // ignore: some environments disallow capture
-        }
-        el.style.cursor = 'grabbing';
-        el.style.userSelect = 'none';
-        // Clear any in-flight text selection that would look ugly mid-drag.
-        window.getSelection()?.removeAllRanges();
-      }
-      el.scrollLeft = startScroll - dx;
-      event.preventDefault();
-    };
-
-    const release = (event: PointerEvent) => {
-      if (pointerId === null || event.pointerId !== pointerId) return;
-      const wasDragging = dragging;
-      pointerId = null;
-      dragging = false;
-      el.style.cursor = '';
-      el.style.userSelect = '';
-      // Swallow the click that would fire right after a real drag.
-      if (wasDragging) {
-        const blocker = (clickEvent: MouseEvent) => {
-          clickEvent.stopPropagation();
-          clickEvent.preventDefault();
-          el.removeEventListener('click', blocker, true);
-        };
-        el.addEventListener('click', blocker, true);
-      }
-    };
-
-    el.addEventListener('pointerdown', onPointerDown);
-    el.addEventListener('pointermove', onPointerMove);
-    el.addEventListener('pointerup', release);
-    el.addEventListener('pointercancel', release);
-    return () => {
-      el.removeEventListener('pointerdown', onPointerDown);
-      el.removeEventListener('pointermove', onPointerMove);
-      el.removeEventListener('pointerup', release);
-      el.removeEventListener('pointercancel', release);
-    };
-  }, [panels]);
 
   const scrollTo = (id: string) => {
     const node = panelRefs.current[id];
@@ -234,7 +157,7 @@ export function Panorama({
         position: 'relative',
         height: '100vh',
         width: '100vw',
-        background: '#0a0a0a',
+        background: 'var(--bg)',
         overflow: 'hidden',
       }}
     >
@@ -245,48 +168,51 @@ export function Panorama({
           left: 0,
           right: 0,
           zIndex: 50,
-          padding: '22px 40px 18px',
+          minHeight: chrome.barMinHeight,
+          padding: `${space.sm}px ${space.xxl}px`,
           display: 'flex',
           alignItems: 'center',
-          gap: 22,
-          background:
-            'linear-gradient(to bottom, rgba(10,10,10,0.96) 40%, rgba(10,10,10,0.0) 100%)',
+          gap: space.lg,
+          background: 'var(--bg)',
+          borderBottom: '1px solid var(--border)',
           pointerEvents: 'none',
+          fontFamily: metroFont,
         }}
       >
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
+            gap: space.sm,
             pointerEvents: 'auto',
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
-            <rect x="1" y="1" width="9" height="9" stroke="#00b4d8" strokeWidth="1.5" />
-            <rect x="12" y="1" width="9" height="9" fill="#00b4d8" />
-            <rect x="1" y="12" width="9" height="9" fill="#00b4d8" opacity="0.3" />
-            <rect x="12" y="12" width="9" height="9" stroke="#00b4d8" strokeWidth="1.5" opacity="0.5" />
-          </svg>
+          <img
+            src="/icons/robot-bird-transparent.svg"
+            width={22}
+            height={22}
+            alt=""
+            style={{ display: 'block', flexShrink: 0 }}
+          />
           <span
             style={{
-              fontSize: '0.65rem',
-              color: '#00b4d8',
+              fontSize: type.stamp,
+              color: 'var(--accent)',
               fontWeight: 700,
-              letterSpacing: '0.22em',
+              letterSpacing: '0.14em',
             }}
           >
             BIRD BRAIN
           </span>
           {workspaceName && (
             <>
-              <span style={{ color: '#333', fontSize: '0.65rem' }}>·</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: type.stamp }}>·</span>
               <span
                 style={{
-                  fontSize: '0.65rem',
-                  color: '#888',
+                  fontSize: type.stamp,
+                  color: 'var(--text-dim)',
                   fontWeight: 600,
-                  letterSpacing: '0.18em',
+                  letterSpacing: '0.1em',
                   textTransform: 'uppercase',
                 }}
               >
@@ -299,28 +225,18 @@ export function Panorama({
         <div
           style={{
             display: 'flex',
-            gap: 24,
-            marginLeft: 20,
+            gap: chrome.pivotGap,
+            marginLeft: space.md,
             pointerEvents: 'auto',
+            alignItems: 'flex-end',
           }}
         >
           {panels.map((p) => (
             <button
               key={p.id}
+              type="button"
               onClick={() => scrollTo(p.id)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px 0',
-                fontSize: '0.65rem',
-                fontWeight: 600,
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-                color: active === p.id ? '#00b4d8' : '#333',
-                borderBottom: active === p.id ? '1px solid #00b4d8' : '1px solid transparent',
-                transition: 'color 0.15s',
-              }}
+              style={pivotItemStyle(active === p.id)}
             >
               {p.label}
             </button>
@@ -332,11 +248,12 @@ export function Panorama({
             marginLeft: 'auto',
             display: 'flex',
             alignItems: 'center',
-            gap: 16,
+            gap: space.md,
             pointerEvents: 'auto',
           }}
         >
           <button
+            type="button"
             onClick={() => setWheelScroll((v) => !v)}
             title={
               wheelScroll
@@ -344,93 +261,37 @@ export function Panorama({
                 : 'Tab navigation is button-only. Click to re-enable mouse-wheel tab scrolling.'
             }
             aria-pressed={wheelScroll}
-            style={{
-              background: 'transparent',
-              border: `1px solid ${wheelScroll ? '#1f3a47' : '#242424'}`,
-              color: wheelScroll ? '#00b4d8' : '#555',
-              cursor: 'pointer',
-              padding: '6px 8px',
-              fontSize: '0.54rem',
-              fontWeight: 700,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              lineHeight: 1,
-            }}
+            style={chromeButtonStyle({ active: wheelScroll, flex: true })}
           >
-            <span style={{ fontSize: '0.82rem' }}>{wheelScroll ? '↔' : '·'}</span>
+            <span style={{ fontSize: 14, lineHeight: 1 }}>{wheelScroll ? '↔' : '·'}</span>
             wheel
           </button>
           <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
             title={engineSummary ? `${engineSummary.provider} · ${engineSummary.model}` : 'Engine settings'}
-            style={{
-              background: 'transparent',
-              border: '1px solid #252525',
-              color: '#888',
-              cursor: 'pointer',
-              padding: '7px 10px',
-              fontSize: '0.56rem',
-              fontWeight: 700,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
+            style={chromeButtonStyle({})}
           >
-            <span style={{ color: '#00b4d8' }}>engine</span>
-            {engineSummary ? (
-              <span style={{ color: '#666' }}>
-                {engineSummary.provider} · {engineSummary.model}
-              </span>
-            ) : null}
+            <span style={{ color: 'var(--accent)' }}>engine</span>
           </button>
           {onSwitchWorkspace && (
-            <button
-              onClick={onSwitchWorkspace}
-              style={{
-                background: 'transparent',
-                border: '1px solid #252525',
-                color: '#888',
-                cursor: 'pointer',
-                padding: '7px 10px',
-                fontSize: '0.56rem',
-                fontWeight: 700,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-              }}
-            >
+            <button type="button" onClick={onSwitchWorkspace} style={chromeButtonStyle({})}>
               switch workspace
             </button>
           )}
           {onBeginAgain && (
-            <button
-              onClick={onBeginAgain}
-              style={{
-                background: 'transparent',
-                border: '1px solid #252525',
-                color: '#888',
-                cursor: 'pointer',
-                padding: '7px 10px',
-                fontSize: '0.56rem',
-                fontWeight: 700,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-              }}
-            >
+            <button type="button" onClick={onBeginAgain} style={chromeButtonStyle({})}>
               begin again
             </button>
           )}
           <div
             style={{
-              fontSize: '0.55rem',
-              letterSpacing: '0.16em',
-              color: unreadBranches > 0 ? '#e74c9b' : '#555',
+              fontSize: type.stamp,
+              letterSpacing: '0.1em',
+              color: unreadBranches > 0 ? '#e74c9b' : 'var(--text-muted)',
               textTransform: 'uppercase',
               fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
             {unreadBranches > 0 ? `${unreadBranches} new branches` : 'branches quiet'}
@@ -438,25 +299,17 @@ export function Panorama({
           <div
             style={{
               display: 'flex',
-              border: '1px solid #1f1f1f',
-              background: '#0f0f0f',
+              minWidth: 160,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
             }}
           >
             {(['live', 'queued'] as const).map((mode) => (
               <button
                 key={mode}
+                type="button"
                 onClick={() => setSynthesisMode(mode)}
-                style={{
-                  background: synthesisMode === mode ? '#00b4d8' : 'transparent',
-                  color: synthesisMode === mode ? '#041015' : '#888',
-                  border: 'none',
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  fontSize: '0.58rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.16em',
-                  textTransform: 'uppercase',
-                }}
+                style={segmentedItemStyle(synthesisMode === mode)}
                 title={
                   mode === 'live'
                     ? 'Open dossier and synthesize immediately'
@@ -479,10 +332,9 @@ export function Panorama({
           overflowY: 'hidden',
           scrollSnapType: 'x proximity',
           scrollBehavior: 'smooth',
-          paddingTop: 72,
+          paddingTop: 56,
           display: 'flex',
           flexDirection: 'row',
-          cursor: 'grab',
         }}
         className="no-scrollbar"
       >
@@ -495,13 +347,12 @@ export function Panorama({
             style={{
               flex: '0 0 auto',
               width: 'min(1100px, 92vw)',
-              marginRight: i === panels.length - 1 ? 0 : 24,
-              height: 'calc(100vh - 72px)',
+              marginRight: i === panels.length - 1 ? 0 : space.lg,
+              height: 'calc(100vh - 56px)',
               scrollSnapAlign: 'start',
-              background: '#0a0a0a',
-              borderRight: i === panels.length - 1 ? 'none' : '1px solid #141414',
+              background: 'var(--bg)',
+              borderRight: i === panels.length - 1 ? 'none' : '1px solid var(--border)',
               overflow: 'hidden',
-              cursor: 'auto',
             }}
           >
             {panel.content}

@@ -19,6 +19,7 @@ interface IngestStats {
   added: number;
   updated: number;
   removed: number;
+  by_kind?: { markdown: number; text: number; svg: number; html: number; code?: number };
 }
 
 type IngestPhase =
@@ -31,6 +32,8 @@ type IngestPhase =
 
 type OpenMode = 'last-opened' | 'fresh-ingest' | 'pick-folder';
 
+const INCLUDE_CODE_LS = 'birdbrain:include-code';
+
 const OPEN_MODE_COPY: Record<OpenMode, { title: string; description: string }> = {
   'last-opened': {
     title: 'Pick up where you left off',
@@ -38,7 +41,7 @@ const OPEN_MODE_COPY: Record<OpenMode, { title: string; description: string }> =
   },
   'fresh-ingest': {
     title: 'Re-ingest and rebuild',
-    description: 'Re-scan the selected folder for new markdown, then open it. Use after heavy edits.',
+    description: 'Re-scan the selected folder for new or changed files, then open it. Use after heavy edits.',
   },
   'pick-folder': {
     title: 'Begin a new project',
@@ -61,10 +64,29 @@ export function WorkspacePicker({
   const [openMode, setOpenMode] = useState<OpenMode>('last-opened');
   const [browserOpen, setBrowserOpen] = useState(false);
   const [phase, setPhase] = useState<IngestPhase>({ kind: 'idle' });
+  const [includeCode, setIncludeCode] = useState(false);
 
   useEffect(() => {
     setHasNative(isTauri());
   }, []);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(INCLUDE_CODE_LS);
+      if (v === '1' || v === 'true') setIncludeCode(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function persistIncludeCode(next: boolean) {
+    setIncludeCode(next);
+    try {
+      localStorage.setItem(INCLUDE_CODE_LS, next ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }
 
   const sorted = useMemo(
     () => [...workspaces].sort((a, b) => (b.last_opened_at ?? 0) - (a.last_opened_at ?? 0)),
@@ -127,7 +149,7 @@ export function WorkspacePicker({
       setFolderInput('');
       setNameInput('');
       await refreshWorkspaces();
-      await openWorkspace(json.workspace, { ingestFirst: true, userGuidance });
+      await openWorkspace(json.workspace, { ingestFirst: true, userGuidance, includeCode });
     } finally {
       setBusyId(null);
     }
@@ -135,8 +157,13 @@ export function WorkspacePicker({
 
   async function openWorkspace(
     ws: WorkspaceRecord,
-    { ingestFirst, userGuidance }: { ingestFirst: boolean; userGuidance?: string }
+    {
+      ingestFirst,
+      userGuidance,
+      includeCode: includeCodeOverride,
+    }: { ingestFirst: boolean; userGuidance?: string; includeCode?: boolean }
   ) {
+    const ingestIncludeCode = includeCodeOverride ?? includeCode;
     setBusyId(ws.id);
     setMessage('');
     try {
@@ -149,6 +176,7 @@ export function WorkspacePicker({
             workspace_id: ws.id,
             docs_path: ws.folder_path,
             user_guidance: userGuidance?.trim() || undefined,
+            include_code: ingestIncludeCode,
           }),
         });
         const json = (await res.json()) as { error?: string; stats?: IngestStats };
@@ -160,7 +188,13 @@ export function WorkspacePicker({
           });
           return;
         }
-        const stats = json.stats ?? { total: 0, added: 0, updated: 0, removed: 0 };
+        const stats = json.stats ?? {
+          total: 0,
+          added: 0,
+          updated: 0,
+          removed: 0,
+          by_kind: { markdown: 0, text: 0, svg: 0, html: 0, code: 0 },
+        };
         if (stats.total === 0) {
           setPhase({ kind: 'empty', folder: ws.folder_path, workspaceId: ws.id });
           return;
@@ -197,41 +231,65 @@ export function WorkspacePicker({
     <div
       style={{
         minHeight: '100vh',
+        maxHeight: '100vh',
         width: '100vw',
         background: '#0a0a0a',
         color: '#f0f0f0',
         display: 'flex',
         alignItems: 'stretch',
+        overflowY: 'auto',
       }}
+      className="thin-scrollbar"
     >
-      <div style={{ width: '58%', padding: '56px 60px 44px', borderRight: '1px solid #151515' }}>
+      <div style={{ width: '58%', padding: '48px 56px', borderRight: '1px solid #151515' }}>
         <div
           style={{
-            fontSize: '0.72rem',
-            color: '#00b4d8',
-            letterSpacing: '0.22em',
-            fontWeight: 700,
-            marginBottom: 18,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 14,
           }}
         >
-          BIRD BRAIN · PROJECTS
+          <img
+            src="/icons/robot-bird-transparent.svg"
+            width={36}
+            height={36}
+            alt=""
+            style={{ display: 'block', flexShrink: 0 }}
+          />
+          <div
+            style={{
+              fontSize: '0.7rem',
+              color: '#00b4d8',
+              letterSpacing: '0.22em',
+              fontWeight: 700,
+            }}
+          >
+            BIRD BRAIN · PROJECTS
+          </div>
         </div>
         <h1
           style={{
-            fontSize: '4.6rem',
-            lineHeight: 0.95,
+            fontSize: '3.4rem',
+            lineHeight: 1,
             fontWeight: 200,
-            letterSpacing: '-0.04em',
+            letterSpacing: '-0.03em',
             margin: 0,
           }}
         >
-          begin
-          <br />
-          again
+          begin again
         </h1>
-        <p style={{ marginTop: 22, fontSize: '1rem', color: '#bbb', lineHeight: 1.7, maxWidth: 620 }}>
-          A workspace is just a folder of markdown. Pick one below, or point at a new one — Bird
-          Brain ingests it, builds the overview, and drops you into the panorama.
+        <p
+          style={{
+            marginTop: 18,
+            fontSize: '0.95rem',
+            color: '#aaa',
+            lineHeight: 1.65,
+            maxWidth: 640,
+          }}
+        >
+          Bird Brain takes a project folder and uses generative hypertext trees to turn abstract,
+          scattered concepts into approachable, workable ideas. All project info and generated content stays on your machine. Bird Brain ingests it, builds the overview, and drops you into the panorama.
         </p>
 
         <div
@@ -252,11 +310,11 @@ export function WorkspacePicker({
           />
           <PurposeCard
             title="For Product"
-            body="Show Bird Brain as a portable way to turn a messy archive into interactive project understanding."
+            body="Turn a messy project folder into interactive, navigable understanding."
           />
         </div>
 
-        <div style={{ marginTop: 34 }}>
+        <div style={{ marginTop: 28 }}>
           <div
             style={{
               fontSize: '0.62rem',
@@ -306,7 +364,7 @@ export function WorkspacePicker({
         </div>
 
         {openMode === 'pick-folder' && (
-          <div style={{ marginTop: 28 }}>
+          <div style={{ marginTop: 24 }}>
             <div
               style={{
                 fontSize: '0.62rem',
@@ -350,70 +408,107 @@ export function WorkspacePicker({
               onChange={(e) => setNameInput(e.target.value)}
               style={{ ...inputStyle, marginTop: 10 }}
             />
-            <div style={{ fontSize: '0.68rem', color: '#555', marginTop: 10, lineHeight: 1.5 }}>
-              {hasNative
-                ? 'Click browse to open the OS folder picker, or paste an absolute path.'
-                : 'Click browse to walk through your home folder, or paste an absolute path.'}
-            </div>
             <div
               style={{
-                fontSize: '0.66rem',
-                color: '#5f6b6f',
-                marginTop: 8,
-                lineHeight: 1.55,
-                padding: '8px 10px',
-                border: '1px dashed #1c2a2e',
-                background: '#0c1214',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 16,
+                flexWrap: 'wrap',
+                marginTop: 12,
               }}
             >
-              Only <code style={{ color: '#00b4d8' }}>.md</code> files are ingested. Images, PDFs,
-              videos, and hidden dot-folders are skipped automatically — nothing is copied or
-              modified in your folder.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', flex: 1 }}>
+                <div style={{ fontSize: '0.66rem', color: '#555', lineHeight: 1.45 }}>
+                  {hasNative ? 'browse for a folder, or paste a path.' : 'browse your home folder, or paste a path.'}
+                  {' · '}
+                  <span title="Readable: .md .txt .rst .org .adoc .json .yaml .csv .log .toml .ini .html .htm .xml .svg. Binaries, PDFs, images, videos, and dot-folders always skipped. Nothing in your folder is copied or modified.">
+                    md + txt + html + svg only
+                  </span>
+                </div>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                    fontSize: '0.66rem',
+                    color: '#888',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={includeCode}
+                    onChange={(e) => persistIncludeCode(e.target.checked)}
+                  />
+                  <span title="Also ingest .ts, .py, .rs, .go, .java, .cpp, etc. Still skips node_modules and build folders.">
+                    include source code
+                  </span>
+                </label>
+              </div>
+              <button
+                onClick={beginAgain}
+                disabled={!canBeginAgain || busy}
+                style={{
+                  background: canBeginAgain ? '#00d68f' : '#1a1a1a',
+                  color: canBeginAgain ? '#041015' : '#666',
+                  border: 'none',
+                  padding: '10px 18px',
+                  cursor: !canBeginAgain || busy ? 'not-allowed' : 'pointer',
+                  fontSize: '0.68rem',
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  fontWeight: 700,
+                  opacity: busy ? 0.7 : 1,
+                  flexShrink: 0,
+                }}
+              >
+                {busy ? 'working…' : 'begin'}
+              </button>
             </div>
+            {message && (
+              <div style={{ marginTop: 8, fontSize: '0.7rem', color: '#888' }}>{message}</div>
+            )}
           </div>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            marginTop: 30,
-            alignItems: 'center',
-            flexWrap: 'wrap',
-          }}
-        >
-          <button
-            onClick={beginAgain}
-            disabled={!canBeginAgain || busy}
+        {openMode !== 'pick-folder' && (
+          <div
             style={{
-              background: canBeginAgain ? '#00d68f' : '#1a1a1a',
-              color: canBeginAgain ? '#041015' : '#666',
-              border: 'none',
-              padding: '12px 18px',
-              cursor: !canBeginAgain || busy ? 'not-allowed' : 'pointer',
-              fontSize: '0.68rem',
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              opacity: busy ? 0.7 : 1,
+              display: 'flex',
+              gap: 10,
+              marginTop: 18,
+              alignItems: 'center',
+              flexWrap: 'wrap',
             }}
           >
-            {busy
-              ? 'working…'
-              : openMode === 'pick-folder'
-                ? 'begin'
-                : openMode === 'fresh-ingest'
-                  ? 're-ingest'
-                  : 'open'}
-          </button>
-          {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
-        </div>
+            <button
+              onClick={beginAgain}
+              disabled={!canBeginAgain || busy}
+              style={{
+                background: canBeginAgain ? '#00d68f' : '#1a1a1a',
+                color: canBeginAgain ? '#041015' : '#666',
+                border: 'none',
+                padding: '10px 18px',
+                cursor: !canBeginAgain || busy ? 'not-allowed' : 'pointer',
+                fontSize: '0.68rem',
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+                opacity: busy ? 0.7 : 1,
+              }}
+            >
+              {busy ? 'working…' : openMode === 'fresh-ingest' ? 're-ingest' : 'open'}
+            </button>
+            {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
+          </div>
+        )}
       </div>
 
       <div
         style={{
           flex: 1,
-          padding: '56px 48px 44px',
+          padding: '48px',
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
@@ -436,8 +531,9 @@ export function WorkspacePicker({
 
         {sorted.length === 0 ? (
           <div style={{ fontSize: '0.82rem', color: '#777', lineHeight: 1.7, maxWidth: 460 }}>
-            Pick "begin a new project" on the left and paste a folder of markdown. Bird Brain will
-            register it, ingest every file inside, and drop you into the ontology startup screen.
+            Pick "begin a new project" on the left and point at a folder of readable documents
+            (markdown, text, HTML, or SVG). Bird Brain will register it, ingest every file inside,
+            and drop you into the ontology startup screen.
           </div>
         ) : (
           <div
@@ -505,7 +601,7 @@ export function WorkspacePicker({
                     </button>
                   )}
                   <button
-                    onClick={() => openWorkspace(ws, { ingestFirst: true })}
+                    onClick={() => openWorkspace(ws, { ingestFirst: true, includeCode })}
                     disabled={busyId === ws.id}
                     style={secondaryButtonStyle(busyId === ws.id)}
                   >
@@ -578,11 +674,11 @@ function IngestProgressModal({
     phase.kind === 'registering'
       ? 'Registering workspace'
       : phase.kind === 'ingesting'
-        ? 'Ingesting markdown'
+        ? 'Ingesting documents'
         : phase.kind === 'done'
           ? 'Ready to open'
           : phase.kind === 'empty'
-            ? 'No markdown found'
+            ? 'No readable files found'
             : 'Ingest failed';
 
   const titleColor =
@@ -630,10 +726,11 @@ function IngestProgressModal({
         </div>
         <div style={{ fontSize: '1.35rem', fontWeight: 300, lineHeight: 1.25, marginBottom: 14 }}>
           {phase.kind === 'registering' && 'Creating the workspace database…'}
-          {phase.kind === 'ingesting' && 'Walking the folder for markdown files.'}
+          {phase.kind === 'ingesting' &&
+            'Walking the folder for markdown, text, HTML, SVG, and optionally source code.'}
           {phase.kind === 'done' &&
             `Added ${phase.stats.added}, updated ${phase.stats.updated}, removed ${phase.stats.removed}.`}
-          {phase.kind === 'empty' && 'This folder has no .md files under it.'}
+          {phase.kind === 'empty' && 'This folder has no readable text files under it.'}
           {phase.kind === 'error' && phase.message}
         </div>
         {folder && (
@@ -668,9 +765,21 @@ function IngestProgressModal({
               marginBottom: 14,
             }}
           >
-            Bird Brain only reads <code style={{ color: '#e7b24c' }}>.md</code> files. You can still
-            open the workspace with its empty database, or cancel and point at a folder that has
-            markdown inside it.
+            Bird Brain reads markdown (<code style={{ color: '#e7b24c' }}>.md</code>), plain text
+            (<code style={{ color: '#e7b24c' }}>.txt</code>, <code style={{ color: '#e7b24c' }}>.rst</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.org</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.adoc</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.json</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.yaml</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.csv</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.log</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.toml</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.ini</code>), HTML (
+            <code style={{ color: '#e7b24c' }}>.html</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.htm</code>,{' '}
+            <code style={{ color: '#e7b24c' }}>.xml</code>), and{' '}
+            <code style={{ color: '#e7b24c' }}>.svg</code>. You can still open the workspace with
+            its empty database, or cancel and point at a folder that has any of those inside.
           </div>
         )}
 
@@ -774,39 +883,77 @@ function IngestSpinnerRow() {
 
 function IngestStatsBlock({ stats }: { stats: IngestStats }) {
   const rows: Array<{ label: string; value: number; color: string }> = [
-    { label: 'markdown files found', value: stats.total, color: '#00b4d8' },
+    { label: 'files found', value: stats.total, color: '#00b4d8' },
     { label: 'added', value: stats.added, color: '#00d68f' },
     { label: 'updated', value: stats.updated, color: '#e7b24c' },
     { label: 'removed', value: stats.removed, color: '#e74c9b' },
   ];
+  const k = stats.by_kind;
+  const kindCells: Array<{ label: string; value: number }> = k
+    ? [
+        { label: 'markdown', value: k.markdown },
+        { label: 'text', value: k.text },
+        { label: 'html', value: k.html ?? 0 },
+        { label: 'svg', value: k.svg },
+        { label: 'code', value: k.code ?? 0 },
+      ].filter((c) => c.value > 0)
+    : [];
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-        gap: 10,
-        marginBottom: 14,
-      }}
-    >
-      {rows.map((r) => (
-        <div
-          key={r.label}
-          style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '10px 12px' }}
-        >
+    <div style={{ marginBottom: 14 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: 10,
+          marginBottom: kindCells.length ? 10 : 0,
+        }}
+      >
+        {rows.map((r) => (
           <div
-            style={{
-              fontSize: '0.56rem',
-              color: '#666',
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              marginBottom: 6,
-            }}
+            key={r.label}
+            style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '10px 12px' }}
           >
-            {r.label}
+            <div
+              style={{
+                fontSize: '0.56rem',
+                color: '#666',
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
+              {r.label}
+            </div>
+            <div style={{ fontSize: '1.2rem', color: r.color, fontWeight: 300 }}>{r.value}</div>
           </div>
-          <div style={{ fontSize: '1.2rem', color: r.color, fontWeight: 300 }}>{r.value}</div>
+        ))}
+      </div>
+      {kindCells.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            fontSize: '0.64rem',
+            color: '#888',
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {kindCells.map((c) => (
+            <span
+              key={c.label}
+              style={{
+                background: '#0f0f0f',
+                border: '1px solid #1c1c1c',
+                padding: '4px 8px',
+              }}
+            >
+              {c.label}&nbsp;<span style={{ color: '#ddd' }}>{c.value}</span>
+            </span>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

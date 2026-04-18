@@ -1,19 +1,10 @@
 'use client';
 
-import { STATUS_COLORS } from '@/lib/ui/semantic';
-
-const STATUS_LABELS: Record<string, string> = {
-  canon: 'CANON',
-  working: 'WORKING',
-  active: 'ACTIVE',
-  archive: 'ARCHIVE',
-  brainstorm: 'BRAINSTORM',
-  reference: 'REF',
-};
+import { STATUS_COLORS, documentStatusBadgeLabel } from '@/lib/ui/semantic';
 
 export function StatusBadge({ status }: { status: string }) {
   const color = STATUS_COLORS[status] ?? STATUS_COLORS.unknown;
-  const label = STATUS_LABELS[status] ?? status.toUpperCase();
+  const label = documentStatusBadgeLabel(status);
 
   return (
     <span

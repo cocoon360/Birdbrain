@@ -92,7 +92,7 @@ export function ConceptTile({
       {size !== 'sm' && (
         <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
           <Pill label="MENTIONS" value={mention_count} color="#888" />
-          <Pill label="CANON" value={canon_docs} color={STATUS_COLORS.canon} muted={canon_docs === 0} />
+          <Pill label="PRIMARY" value={canon_docs} color={STATUS_COLORS.canon} muted={canon_docs === 0} />
           <Pill label="WORK" value={working_docs} color={STATUS_COLORS.working} muted={working_docs === 0} />
           <span style={{ marginLeft: 'auto', fontSize: '0.55rem', color: '#333' }}>
             {document_count} docs

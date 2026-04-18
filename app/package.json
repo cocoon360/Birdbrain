@@ -7,8 +7,11 @@
     "build": "next build",
     "start": "next start",
     "ingest": "tsx scripts/ingest.ts",
+    "eval:dossiers": "tsx scripts/eval-dossiers.ts",
     "build:sidecar": "next build && node scripts/pack-sidecar.mjs",
-    "start:sidecar": "node .next/standalone/server.js"
+    "start:sidecar": "node .next/standalone/server.js",
+    "tauri:dev": "sh -c 'cd ../src-tauri && cargo tauri dev'",
+    "tauri:build": "sh -c 'cd ../src-tauri && cargo tauri build'"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
