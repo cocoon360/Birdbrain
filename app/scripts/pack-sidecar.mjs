@@ -79,3 +79,10 @@ if (fs.existsSync(fileUriToPathSrc)) {
 }
 
 console.log("sidecar packaged at:", standalone);
+
+// Mirror into src-tauri/bundle/sidecar for Tauri `bundle.resources` (must stay outside
+// app/.next so `next dev` does not delete it and thrash Cargo rebuild watchers).
+const tauriSidecar = path.resolve(appRoot, "..", "src-tauri", "bundle", "sidecar");
+fs.rmSync(tauriSidecar, { recursive: true, force: true });
+copyDir(standalone, tauriSidecar);
+console.log("copied standalone →", tauriSidecar);

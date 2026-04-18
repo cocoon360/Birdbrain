@@ -25,7 +25,8 @@ fn main() {
             // Build the initial picker window pointed at the live sidecar
             // URL. We do this in setup() instead of tauri.conf.json so the
             // URL can change depending on the bundled sidecar port.
-            let url = format!("{}/", base_url);
+            // Trailing slash avoids subtle origin/path joins in the webview.
+            let url = format!("{}/", base_url.trim_end_matches('/'));
             let parsed = url
                 .parse::<url::Url>()
                 .map_err(|e| tauri::Error::Anyhow(anyhow::anyhow!(e.to_string())))?;

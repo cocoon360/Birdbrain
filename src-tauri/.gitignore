@@ -1,0 +1,2 @@
+# Populated by `npm run build:sidecar` (see scripts/pack-sidecar.mjs); dev uses an empty placeholder from build.rs.
+bundle/sidecar/

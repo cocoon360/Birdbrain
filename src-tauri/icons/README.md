@@ -1,20 +1,16 @@
 # Icons
 
-Tauri expects icons in this folder before `tauri build` succeeds. Drop in the
-following files before packaging:
+These files are the **default Tauri app-template icons** (from `tauri-v2.0.0`
+`crates/tauri-cli/templates/app/src-tauri/icons`) so `cargo tauri dev` and
+`cargo tauri build` can run without extra setup. Tauri’s build reads them at
+compile time.
 
-- `32x32.png`
-- `128x128.png`
-- `128x128@2x.png`
-- `icon.icns` (macOS)
-- `icon.ico` (Windows)
-
-You can generate all of them from a single source PNG with:
+Replace them before shipping Bird Brain:
 
 ```bash
 cd src-tauri
-cargo tauri icon path/to/source-icon.png
+cargo tauri icon path/to/your-1024.png
 ```
 
-The placeholder dev icon is intentionally left out so Cargo does not ship a
-generic logo in builds. Dev runs (`cargo tauri dev`) still work without icons.
+That regenerates `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, and
+`icon.ico` in this folder.

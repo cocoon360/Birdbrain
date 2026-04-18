@@ -21,6 +21,7 @@ impl SidecarState {
         if cfg!(debug_assertions) {
             return Ok(Self {
                 child: Mutex::new(None),
+                // Match `build.devUrl` / `next dev` so the webview origin lines up with the dev server.
                 port: 3000,
             });
         }
@@ -50,7 +51,11 @@ impl SidecarState {
     }
 
     pub fn base_url(&self) -> String {
-        format!("http://127.0.0.1:{}", self.port)
+        if cfg!(debug_assertions) {
+            format!("http://localhost:{}", self.port)
+        } else {
+            format!("http://127.0.0.1:{}", self.port)
+        }
     }
 }
 
