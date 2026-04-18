@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useOptionalWorkspace } from './WorkspaceProvider';
+import { logParticipation } from '../lib/participation/log';
 
 export type SynthesisMode = 'live' | 'queued';
 type BranchSource = 'root' | 'known' | 'candidate' | 'related' | 'external';
@@ -231,6 +232,21 @@ export function DossierProvider({ children }: { children: ReactNode }) {
     setDocId(null);
     setConceptSlug(slug);
 
+    // Participation log (fire-and-forget) — every concept open is an attention
+    // event. fromSlug is taken from whatever is currently active in the
+    // branch, so bridging and memesis can reason over it.
+    setBranchStore((prev) => {
+      const active = prev.branches.find((b) => b.id === prev.activeBranchId) ?? null;
+      const fromSlug = branchMode === 'new' ? null : active?.currentSlug ?? null;
+      logParticipation(workspaceId, {
+        kind: 'open_concept',
+        slug,
+        fromSlug,
+        source,
+      });
+      return prev;
+    });
+
     setBranchStore((prev) => {
       const now = Date.now();
       const active = prev.branches.find((branch) => branch.id === prev.activeBranchId) ?? null;
@@ -326,7 +342,7 @@ export function DossierProvider({ children }: { children: ReactNode }) {
         activeBranchId: active.id,
       };
     });
-  }, []);
+  }, [workspaceId]);
 
   const openBranch = useCallback((id: string) => {
     const target = branchStore.branches.find((item) => item.id === id);
@@ -376,7 +392,8 @@ export function DossierProvider({ children }: { children: ReactNode }) {
   const openDoc = useCallback((id: number) => {
     setConceptSlug(null);
     setDocId(id);
-  }, []);
+    logParticipation(workspaceId, { kind: 'open_doc', docId: id });
+  }, [workspaceId]);
 
   const markBranchStatus = useCallback((slug: string, status: BranchStatus) => {
     setBranchStore((prev) => ({
@@ -400,6 +417,16 @@ export function DossierProvider({ children }: { children: ReactNode }) {
     setBranchStore({ schemaVersion: 2, branches: [], activeBranchId: null });
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(branchKey(workspaceId));
+      // A session reset is itself an event worth recording BEFORE the
+      // session id rotates, so the Datalog retains the shape of the prior
+      // reading even after the user nukes their trail in the UI.
+      logParticipation(workspaceId, { kind: 'reset' });
+      // Rotate the server session id by clearing the participation cell so
+      // the next event starts a fresh session.
+      const key = workspaceId
+        ? `birdbrain:${workspaceId}:participation-session`
+        : 'birdbrain:participation-session';
+      window.localStorage.removeItem(key);
     }
   }, [workspaceId]);
 

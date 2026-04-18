@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useDossier } from './DossierContext';
+import { useOptionalWorkspace } from './WorkspaceProvider';
+import { logParticipation } from '../lib/participation/log';
 import {
   STATUS_COLORS,
   TYPE_COLORS,
   LINK_COLORS,
+  documentStatusBadgeLabel,
 } from '@/lib/ui/semantic';
 
 interface ConceptData {
@@ -47,12 +50,26 @@ type Span =
 interface DossierError {
   code: string;
   message: string;
+  details?: string;
+}
+
+interface PrecontextData {
+  plain_definition: string;
+  project_role: string;
+  study_relevance: string;
+  related_concepts: string[];
+  precontext_text: string;
+  generated_at: number;
+  generator?: string;
+  model?: string | null;
 }
 
 interface DossierData {
   blocked?: boolean;
   concept: ConceptData;
+  precontext: PrecontextData | null;
   pending: boolean;
+  pending_stage?: 'precontext' | 'dossier';
   profile?: 'live' | 'queued';
   paragraph: Span[] | null;
   evidence: EvidenceRow[];
@@ -73,11 +90,14 @@ export function ConceptDossier() {
     branchContext,
     markBranchStatus,
   } = useDossier();
+  const workspace = useOptionalWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [data, setData] = useState<DossierData | null>(null);
   const [loading, setLoading] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [queuingPhrase, setQueuingPhrase] = useState<string | null>(null);
   const [queueActivity, setQueueActivity] = useState<'idle' | 'status' | 'generating'>('idle');
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     if (!conceptSlug) {
@@ -89,10 +109,23 @@ export function ConceptDossier() {
     setData(null);
     setShowEvidence(false);
     fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext))
-      .then((r) => r.json())
+      .then(async (r) => {
+        const text = await r.text();
+        try {
+          return JSON.parse(text) as DossierData;
+        } catch {
+          throw new Error(
+            r.ok ? 'Dossier response was not JSON' : `Dossier request failed (${r.status})`
+          );
+        }
+      })
       .then((d) => {
         setData(d);
         markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+      })
+      .catch(() => {
+        setData(null);
+        markBranchStatus(conceptSlug, 'idle');
       })
       .finally(() => setLoading(false));
   }, [conceptSlug, synthesisMode, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus]);
@@ -125,6 +158,28 @@ export function ConceptDossier() {
     };
   }, [conceptSlug, synthesisMode, data?.pending, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus]);
 
+  // Log every candidate span shown in the current paragraph as an impression.
+  // This is what lets candidate_concepts accumulate distinct-session reach
+  // even for readers who never click a candidate span.
+  // MUST live above the early return so hook order stays stable across renders.
+  useEffect(() => {
+    if (!data?.paragraph || !conceptSlug) return;
+    const seen = new Set<string>();
+    for (const span of data.paragraph) {
+      if ('ref' in span && span.kind === 'candidate') {
+        const key = span.text.trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        logParticipation(workspaceId, {
+          kind: 'impression',
+          phrase: span.text,
+          fromSlug: conceptSlug,
+          source: 'prose',
+        });
+      }
+    }
+  }, [data?.paragraph, conceptSlug, workspaceId]);
+
   if (!conceptSlug) return null;
 
   const concept = data?.concept;
@@ -138,8 +193,41 @@ export function ConceptDossier() {
     (row) => !['canon', 'working', 'active'].includes(row.doc_status)
   );
 
+  async function regenerateDossier() {
+    if (!conceptSlug || !data || data.blocked) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/dossier/${encodeURIComponent(conceptSlug)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'regenerate',
+          profile: synthesisMode,
+          from: branchContext.fromSlug ?? undefined,
+          root: branchContext.rootSlug ?? undefined,
+          branch: branchContext.branchId ?? undefined,
+        }),
+      });
+      const d = (await res.json()) as DossierData;
+      if (d && typeof d === 'object' && 'concept' in d && d.concept) {
+        setData(d);
+        markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+      }
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   async function onCandidateClick(phrase: string) {
     if (!conceptSlug) return;
+    // Record the click BEFORE navigation so candidate_concepts.clicks bumps
+    // even if the /api/dossier/queue promotion roundtrip fails.
+    logParticipation(workspaceId, {
+      kind: 'promote',
+      phrase,
+      fromSlug: conceptSlug,
+      source: 'prose',
+    });
     setQueuingPhrase(phrase);
     try {
       const res = await fetch('/api/dossier/queue', {
@@ -232,8 +320,8 @@ export function ConceptDossier() {
         {concept && (
           <div style={{ display: 'flex', gap: 18, marginTop: 10 }}>
             <Stat label="MENTIONS" value={concept.mention_count} color="#888" />
-            <Stat label="IN CANON" value={concept.canon_docs} color="#00d68f" />
-            <Stat label="IN WORKING" value={concept.working_docs} color="#f6c90e" />
+            <Stat label="PRIMARY PATHS" value={concept.canon_docs} color="#00d68f" />
+            <Stat label="IN PROGRESS" value={concept.working_docs} color="#f6c90e" />
             <Stat label="TOTAL DOCS" value={concept.document_count} color="#888" />
           </div>
         )}
@@ -251,13 +339,58 @@ export function ConceptDossier() {
 
         {!loading && data?.paragraph && (
           <section>
-            <SectionHeader label="SYNTHESIS" accent={typeColor} />
+            <SectionHeader
+              label="SYNTHESIS"
+              accent={typeColor}
+              actions={
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => copyDossierAsMarkdown(data, targetName)}
+                    title="Copy this dossier (paragraph + sources) to the clipboard as Markdown."
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #2a2a2a',
+                      color: '#888',
+                      cursor: 'pointer',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.14em',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      padding: '6px 10px',
+                    }}
+                  >
+                    Export
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void regenerateDossier()}
+                    disabled={regenerating || data.blocked}
+                    title="Clear cached synthesis and run the engine again with current settings and prompts."
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #2a2a2a',
+                      color: regenerating ? '#444' : '#888',
+                      cursor: regenerating || data.blocked ? 'not-allowed' : 'pointer',
+                      fontSize: '0.55rem',
+                      letterSpacing: '0.14em',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      padding: '6px 10px',
+                    }}
+                  >
+                    {regenerating ? '…' : 'Regenerate'}
+                  </button>
+                </div>
+              }
+            />
             <ParagraphView
               paragraph={data.paragraph}
               onKnown={(slug) => openConcept(slug, { branch: 'current', source: 'known' })}
               onCandidate={onCandidateClick}
               queuingPhrase={queuingPhrase}
             />
+            <SourcesStrip evidence={data.evidence} onOpen={openDoc} />
             {data.generator && (
               <div style={{ marginTop: 14, fontSize: '0.55rem', color: '#333', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
                 {data.profile ?? synthesisMode} · generated by {data.generator}
@@ -268,33 +401,69 @@ export function ConceptDossier() {
         )}
 
         {!loading && data?.pending && (
-          <PendingBanner
-            name={targetName}
-            error={data.error}
-            onRetry={() => {
-              if (!conceptSlug) return;
-              setLoading(true);
-              fetch(`${buildDossierUrl(conceptSlug, synthesisMode, branchContext)}&t=${Date.now()}`)
-                .then((r) => r.json())
-                .then((d) => {
-                  setData(d);
-                  markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
-                })
-                .finally(() => setLoading(false));
-            }}
-            mode={synthesisMode}
-            queueActivity={queueActivity}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => void regenerateDossier()}
+                disabled={regenerating || Boolean(data.blocked)}
+                title="Drop cached output and re-queue or re-run synthesis from scratch."
+                style={{
+                  background: 'transparent',
+                  border: '1px solid #2a2a2a',
+                  color: regenerating ? '#444' : '#888',
+                  cursor: regenerating || data.blocked ? 'not-allowed' : 'pointer',
+                  fontSize: '0.55rem',
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  padding: '6px 10px',
+                }}
+              >
+                {regenerating ? '…' : 'Regenerate'}
+              </button>
+            </div>
+            {data.precontext && <PrecontextCard precontext={data.precontext} />}
+            <PendingBanner
+              name={targetName}
+              error={data.error}
+              pendingStage={data.pending_stage ?? (data.precontext ? 'dossier' : 'precontext')}
+              onRetry={() => {
+                if (!conceptSlug) return;
+                setLoading(true);
+                fetch(`${buildDossierUrl(conceptSlug, synthesisMode, branchContext)}&t=${Date.now()}`)
+                  .then((r) => r.json())
+                  .then((d) => {
+                    setData(d);
+                    markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+                  })
+                  .finally(() => setLoading(false));
+              }}
+              mode={synthesisMode}
+              queueActivity={queueActivity}
+            />
+          </div>
         )}
 
         {!loading && data?.blocked && (
           <PendingBanner
             name={targetName}
             error={data.error}
+            pendingStage={data.pending_stage ?? (data.precontext ? 'dossier' : 'precontext')}
             onRetry={() => {
               if (!conceptSlug) return;
               setLoading(true);
-              fetch(`${buildDossierUrl(conceptSlug, synthesisMode, branchContext)}&t=${Date.now()}`)
+              fetch(`/api/dossier/${encodeURIComponent(conceptSlug)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'regenerate',
+                  profile: synthesisMode,
+                  from: branchContext.fromSlug ?? undefined,
+                  root: branchContext.rootSlug ?? undefined,
+                  branch: branchContext.branchId ?? undefined,
+                }),
+              })
                 .then((r) => r.json())
                 .then((d) => {
                   setData(d);
@@ -362,7 +531,7 @@ export function ConceptDossier() {
                 fontWeight: 600,
               }}
             >
-              {showEvidence ? '▾' : '▸'} history / archive context ({historicalEvidence.length})
+              {showEvidence ? '▾' : '▸'} older and supporting context ({historicalEvidence.length})
             </button>
             {showEvidence && (
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -446,12 +615,14 @@ function ParagraphView({
 function PendingBanner({
   name,
   error,
+  pendingStage,
   onRetry,
   mode,
   queueActivity,
 }: {
   name: string;
   error?: DossierError;
+  pendingStage: 'precontext' | 'dossier';
   onRetry: () => void;
   mode: 'live' | 'queued';
   queueActivity: 'idle' | 'status' | 'generating';
@@ -463,7 +634,9 @@ function PendingBanner({
     : isMissing
       ? 'CURSOR AGENT NOT INSTALLED'
       : mode === 'queued'
-        ? 'QUEUED FOR SYNTHESIS'
+        ? pendingStage === 'precontext'
+          ? 'QUEUED FOR PRECONTEXT'
+          : 'QUEUED FOR DOSSIER'
       : 'SYNTHESIS UNAVAILABLE';
   const body = isAuth ? (
     <>
@@ -480,12 +653,17 @@ function PendingBanner({
     <>
       {mode === 'queued' ? (
         <>
-          <strong style={{ color: '#eee' }}>{name}</strong> is in the queued synthesis lane. The
-          preview will keep processing it automatically in the background while evidence stays
+          <strong style={{ color: '#eee' }}>{name}</strong>{' '}
+          {pendingStage === 'precontext'
+            ? 'is building its bird’s-eye precontext first.'
+            : 'already has precontext and is waiting on the final dossier paragraph.'}{' '}
+          The preview will keep processing it automatically in the background while evidence stays
           visible below.{' '}
           <span style={{ color: '#666' }}>
             {queueActivity === 'generating'
-              ? 'Background generation is active now.'
+              ? pendingStage === 'precontext'
+                ? 'Background precontext generation is active now.'
+                : 'Background dossier generation is active now.'
               : queueActivity === 'status'
                 ? 'Checking queue status.'
                 : 'Waiting for queued work.'}
@@ -500,7 +678,7 @@ function PendingBanner({
               (<span style={{ color: '#e74c9b' }}>{error.message}</span>)
             </>
           ) : null}
-          . Evidence from the archive is shown below in the meantime.
+          . Supporting snippets from the rest of the corpus are shown below in the meantime.
         </>
       )}
     </>
@@ -528,6 +706,39 @@ function PendingBanner({
         {headline}
       </div>
       <div>{body}</div>
+      {error?.details && (
+        <details style={{ marginTop: 10 }}>
+          <summary
+            style={{
+              cursor: 'pointer',
+              fontSize: '0.6rem',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: '#666',
+              fontWeight: 700,
+            }}
+          >
+            show agent stderr
+          </summary>
+          <pre
+            style={{
+              marginTop: 8,
+              padding: '10px 12px',
+              background: '#070707',
+              border: '1px solid #1a1a1a',
+              color: '#bbb',
+              fontSize: '0.72rem',
+              lineHeight: 1.5,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 220,
+              overflowY: 'auto',
+            }}
+          >
+            {error.details}
+          </pre>
+        </details>
+      )}
       <button
         onClick={onRetry}
         style={{
@@ -544,6 +755,57 @@ function PendingBanner({
       >
         retry synthesis
       </button>
+    </div>
+  );
+}
+
+function PrecontextCard({ precontext }: { precontext: PrecontextData }) {
+  return (
+    <div
+      style={{
+        background: '#0f0f0f',
+        border: '1px solid #1c1c1c',
+        padding: '16px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      <div
+        style={{
+          color: '#00b4d8',
+          fontSize: '0.55rem',
+          letterSpacing: '0.18em',
+          fontWeight: 700,
+        }}
+      >
+        PRECONTEXT READY
+      </div>
+      <div style={{ color: '#d8d8d8', fontSize: '0.9rem', lineHeight: 1.65 }}>{precontext.precontext_text}</div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <PrecontextLine label="What it is" value={precontext.plain_definition} />
+        <PrecontextLine label="What it is here" value={precontext.project_role} />
+        <PrecontextLine label="Why it matters" value={precontext.study_relevance} />
+      </div>
+    </div>
+  );
+}
+
+function PrecontextLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div
+        style={{
+          color: '#666',
+          fontSize: '0.55rem',
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          fontWeight: 700,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ color: '#aaa', fontSize: '0.78rem', lineHeight: 1.6 }}>{value}</div>
     </div>
   );
 }
@@ -635,6 +897,140 @@ function buildDossierUrl(
   return `/api/dossier/${slug}?${params.toString()}`;
 }
 
+function SourcesStrip({
+  evidence,
+  onOpen,
+}: {
+  evidence: EvidenceRow[];
+  onOpen: (docId: number) => void;
+}) {
+  // Dedupe by doc_id so three mentions of the same doc render as one chip.
+  // We keep the first occurrence's status + title because evidence is already
+  // ranked upstream (primary/canon first, then working, then archive).
+  const seen = new Set<number>();
+  const uniqueDocs: { id: number; title: string; status: string }[] = [];
+  for (const e of evidence) {
+    if (seen.has(e.doc_id)) continue;
+    seen.add(e.doc_id);
+    uniqueDocs.push({ id: e.doc_id, title: e.doc_title, status: e.doc_status });
+  }
+  if (uniqueDocs.length === 0) return null;
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <span
+        style={{
+          fontSize: '0.55rem',
+          letterSpacing: '0.18em',
+          color: '#555',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          marginRight: 4,
+        }}
+      >
+        Sources
+      </span>
+      {uniqueDocs.map((d) => {
+        const color = STATUS_COLORS[d.status] ?? '#666';
+        return (
+          <button
+            key={d.id}
+            onClick={() => onOpen(d.id)}
+            title={`${d.title} · ${documentStatusBadgeLabel(d.status)}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#0f0f0f',
+              border: '1px solid #1d1d1d',
+              padding: '3px 8px',
+              color: '#bbb',
+              fontSize: '0.7rem',
+              cursor: 'pointer',
+              maxWidth: 240,
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: color,
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {d.title}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function spansToPlain(paragraph: Span[] | null | undefined): string {
+  if (!paragraph) return '';
+  return paragraph
+    .map((s) => {
+      if ('ref' in s && s.kind === 'known') {
+        // Stable cross-dossier link form so exports don't break when the UI changes.
+        return `[${s.text}](#/concept/${s.ref})`;
+      }
+      return s.text;
+    })
+    .join('');
+}
+
+function copyDossierAsMarkdown(data: DossierData, targetName: string) {
+  const lines: string[] = [];
+  lines.push(`# ${targetName}`);
+  if (data.concept?.type) lines.push(`> ${data.concept.type}`);
+  lines.push('');
+  lines.push(spansToPlain(data.paragraph));
+  const seen = new Set<number>();
+  const uniqueDocs: { title: string; status: string; heading: string | null }[] = [];
+  for (const e of data.evidence ?? []) {
+    if (seen.has(e.doc_id)) continue;
+    seen.add(e.doc_id);
+    uniqueDocs.push({ title: e.doc_title, status: e.doc_status, heading: e.heading });
+  }
+  if (uniqueDocs.length > 0) {
+    lines.push('');
+    lines.push('## Sources');
+    for (const d of uniqueDocs) {
+      const statusLabel = documentStatusBadgeLabel(d.status).toLowerCase();
+      const heading = d.heading ? ` — ${d.heading}` : '';
+      lines.push(`- **${d.title}**${heading} _(${statusLabel})_`);
+    }
+  }
+  if (data.generator) {
+    lines.push('');
+    lines.push(
+      `_Generated by ${data.generator}${data.model ? ` · ${data.model}` : ''} · profile: ${
+        data.profile ?? 'live'
+      }_`
+    );
+  }
+  const text = lines.join('\n');
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    void navigator.clipboard.writeText(text);
+  }
+}
+
 function EvidenceCard({
   row,
   onOpen,
@@ -657,10 +1053,10 @@ function EvidenceCard({
     >
       <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
         <span style={{ fontSize: '0.78rem', color: '#eee' }}>{row.doc_title}</span>
-        {row.heading && <span style={{ fontSize: '0.68rem', color: '#555' }}>§ {row.heading}</span>}
+        {row.heading && <span style={{ fontSize: '0.68rem', color: '#555' }}>· {row.heading}</span>}
       </div>
       <div style={{ fontSize: '0.56rem', color: STATUS_COLORS[row.doc_status] ?? '#666', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>
-        {row.doc_status}
+        {documentStatusBadgeLabel(row.doc_status)}
       </div>
       <div style={{ fontSize: '0.7rem', color: '#777', lineHeight: 1.5 }}>{row.body.slice(0, 220)}</div>
     </button>
@@ -687,21 +1083,40 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   );
 }
 
-function SectionHeader({ label, accent = '#888' }: { label: string; accent?: string }) {
+function SectionHeader({
+  label,
+  accent = '#888',
+  actions,
+}: {
+  label: string;
+  accent?: string;
+  actions?: ReactNode;
+}) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-      <span
-        style={{
-          fontSize: '0.6rem',
-          fontWeight: 700,
-          letterSpacing: '0.18em',
-          color: accent,
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
-      </span>
-      <div style={{ flex: 1, height: 1, background: '#181818' }} />
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flex: 1, minWidth: 120 }}>
+        <span
+          style={{
+            fontSize: '0.6rem',
+            fontWeight: 700,
+            letterSpacing: '0.18em',
+            color: accent,
+            textTransform: 'uppercase',
+          }}
+        >
+          {label}
+        </span>
+        <div style={{ flex: 1, height: 1, background: '#181818', minWidth: 24 }} />
+      </div>
+      {actions}
     </div>
   );
 }

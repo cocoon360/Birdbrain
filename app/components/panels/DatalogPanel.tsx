@@ -1,8 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDossier, type BranchRecord } from '../DossierContext';
+import { useOptionalWorkspace } from '../WorkspaceProvider';
+import { getSessionId, logParticipation } from '../../lib/participation/log';
 import { BRANCH_COLORS, MODE_COLORS } from '@/lib/ui/semantic';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+type Span =
+  | { text: string }
+  | { text: string; ref: string; kind: 'known' | 'candidate' };
+
+interface MemesisPayload {
+  row: {
+    paragraph: Span[];
+    generator: string;
+    model: string | null;
+    generated_at: number;
+    event_count: number;
+  } | null;
+  reason?: 'insufficient-events' | 'fresh-cache' | 'ok';
+}
 
 interface PendingResponse {
   pending: Array<{
@@ -15,12 +34,52 @@ interface PendingResponse {
 }
 
 export function DatalogPanel() {
-  const { synthesisMode, setSynthesisMode, branches, activeBranchId, openBranch, openBranchStep } =
-    useDossier();
+  const {
+    synthesisMode,
+    setSynthesisMode,
+    branches,
+    activeBranchId,
+    openBranch,
+    openBranchStep,
+    openConcept,
+  } = useDossier();
+  const workspace = useOptionalWorkspace();
+  const workspaceId = workspace?.id ?? null;
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    setSessionId(getSessionId(workspaceId));
+  }, [workspaceId]);
+
+  const [memesis, setMemesis] = useState<MemesisPayload | null>(null);
+  const [memesisBusy, setMemesisBusy] = useState(false);
+  const [memesisError, setMemesisError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [laneState, setLaneState] = useState<'idle' | 'checking' | 'generating'>('checking');
 
   const hasPendingBranch = branches.some((branch) => branch.status === 'pending');
+
+  const refreshParticipation = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const memRes = await fetch(
+        `/api/participation/memesis?sessionId=${encodeURIComponent(sessionId)}`,
+        { cache: 'no-store' }
+      );
+      const memJson = (await memRes.json()) as
+        | { paragraph: MemesisPayload['row']; eventCount: number }
+        | { error: string };
+      if ('paragraph' in memJson) {
+        setMemesis({ row: memJson.paragraph, reason: memJson.paragraph ? 'fresh-cache' : undefined });
+      }
+    } catch {
+      // network hiccup — leave stale data on screen
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    void refreshParticipation();
+  }, [refreshParticipation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,97 +112,280 @@ export function DatalogPanel() {
     };
   }, [synthesisMode, hasPendingBranch]);
 
+  const onGenerateMemesis = useCallback(async () => {
+    if (!sessionId || memesisBusy) return;
+    setMemesisBusy(true);
+    setMemesisError(null);
+    try {
+      const res = await fetch('/api/participation/memesis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, force: true }),
+      });
+      const data = (await res.json()) as MemesisPayload | { error: string };
+      if ('error' in data) {
+        setMemesisError(data.error);
+      } else {
+        setMemesis(data);
+        logParticipation(workspaceId, { kind: 'memesis' });
+      }
+    } catch (err) {
+      setMemesisError(err instanceof Error ? err.message : 'unknown');
+    } finally {
+      setMemesisBusy(false);
+    }
+  }, [memesisBusy, sessionId, workspaceId]);
+
   const active = branches.find((branch) => branch.id === activeBranchId) ?? null;
   const unread = branches.filter((branch) => branch.unread).length;
 
   return (
     <div
-      style={{ height: '100%', overflowY: 'auto', padding: '32px 48px 48px' }}
+      style={{ height: '100%', overflowY: 'auto', padding: '32px 48px 56px' }}
       className="thin-scrollbar"
     >
       <div style={{ marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
-          branch memory
+          the archive, watching back
         </div>
         <h1 className="metro-title">datalog</h1>
-        <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#555', maxWidth: 560, lineHeight: 1.5 }}>
-          Switch between the immediate exploration lane and the slower queued lane, then inspect
-          every branch the HUD has surfaced from your hypertext path.
+        <p
+          style={{
+            marginTop: 10,
+            fontSize: '0.78rem',
+            color: '#555',
+            maxWidth: 620,
+            lineHeight: 1.55,
+          }}
+        >
+          Today&rsquo;s reading, summarized by the archive. Status and branches follow.
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18, marginBottom: 22 }}>
-        <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.6rem', color: '#666', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
-            synthesis lane
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {(['live', 'queued'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setSynthesisMode(mode)}
-                style={{
-                  background: synthesisMode === mode ? MODE_COLORS[mode] : 'transparent',
-                  color: synthesisMode === mode ? '#041015' : '#aaa',
-                  border: `1px solid ${MODE_COLORS[mode]}`,
-                  padding: '8px 14px',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  fontSize: '0.62rem',
-                  letterSpacing: '0.16em',
-                  fontWeight: 700,
-                }}
-              >
-                {mode}
-              </button>
+      <MemesisCard
+        payload={memesis}
+        onGenerate={onGenerateMemesis}
+        busy={memesisBusy}
+        error={memesisError}
+        onKnown={(slug) => openConcept(slug, { branch: 'new', source: 'known' })}
+      />
+
+      <StatusStrip
+        synthesisMode={synthesisMode}
+        setSynthesisMode={setSynthesisMode}
+        pendingCount={pendingCount}
+        unread={unread}
+        depth={active?.path.length ?? 0}
+        laneState={laneState}
+      />
+
+      {branches.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <SectionHeader title="BRANCHES TO CHECK OUT" accent={BRANCH_COLORS.new} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            {branches.map((branch) => (
+              <BranchCard
+                key={branch.id}
+                branch={branch}
+                activeBranchId={activeBranchId}
+                openBranch={openBranch}
+                openBranchStep={openBranchStep}
+              />
             ))}
           </div>
-          <div style={{ fontSize: '0.74rem', color: '#888', lineHeight: 1.6 }}>
-            {synthesisMode === 'live'
-              ? 'Live opens a dossier and writes immediately, so it feels magical and responsive.'
-              : 'Queued defers writing into the background lane so the preview can work through pending dossiers automatically.'}
-          </div>
         </div>
-
-        <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '18px 20px' }}>
-          <div style={{ fontSize: '0.6rem', color: '#666', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
-            status
-          </div>
-          <StatRow label="pending queued dossiers" value={pendingCount} color={MODE_COLORS.queued} />
-          <StatRow label="new branches" value={unread} color={BRANCH_COLORS.new} />
-          <StatRow label="active branch depth" value={active?.path.length ?? 0} color={BRANCH_COLORS.active} />
-          <div style={{ marginTop: 12, fontSize: '0.68rem', color: '#777', lineHeight: 1.6 }}>
-            {synthesisMode === 'live'
-              ? 'Live lane is idle until you open another dossier.'
-              : laneState === 'generating'
-                ? 'Background generation is active because queued dossiers are still pending.'
-                : laneState === 'checking'
-                  ? 'Only checking queue status.'
-                  : 'Queue is calm. No background generation is running.'}
-          </div>
-        </div>
-      </div>
-
-      <SectionHeader title="BRANCHES TO CHECK OUT" accent={BRANCH_COLORS.new} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginBottom: 24 }}>
-        {branches.map((branch) => (
-          <BranchCard
-            key={branch.id}
-            branch={branch}
-            activeBranchId={activeBranchId}
-            openBranch={openBranch}
-            openBranchStep={openBranchStep}
-          />
-        ))}
-        {branches.length === 0 && (
-          <div style={{ color: '#555', fontSize: '0.8rem' }}>
-            No branches yet. Open a concept tile from the HUD to start one.
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
+
+// ── Status strip (compact, single row) ───────────────────────────────────────
+
+function StatusStrip({
+  synthesisMode,
+  setSynthesisMode,
+  pendingCount,
+  unread,
+  depth,
+  laneState,
+}: {
+  synthesisMode: 'live' | 'queued';
+  setSynthesisMode: (mode: 'live' | 'queued') => void;
+  pendingCount: number;
+  unread: number;
+  depth: number;
+  laneState: 'idle' | 'checking' | 'generating';
+}) {
+  const pill = (label: string, value: number, color: string) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+      <span style={{ color, fontSize: '0.82rem', fontWeight: 500 }}>{value}</span>
+      <span
+        style={{
+          fontSize: '0.54rem',
+          color: '#666',
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+  return (
+    <section
+      style={{
+        marginTop: 18,
+        background: '#0f0f0f',
+        border: '1px solid #181818',
+        padding: '10px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ display: 'flex', gap: 6 }}>
+        {(['live', 'queued'] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setSynthesisMode(mode)}
+            style={{
+              background: synthesisMode === mode ? MODE_COLORS[mode] : 'transparent',
+              color: synthesisMode === mode ? '#041015' : '#aaa',
+              border: `1px solid ${MODE_COLORS[mode]}`,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              fontSize: '0.56rem',
+              letterSpacing: '0.14em',
+              fontWeight: 700,
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+        {pill('pending', pendingCount, MODE_COLORS.queued)}
+        {pill('unread branches', unread, BRANCH_COLORS.new)}
+        {pill('depth', depth, BRANCH_COLORS.active)}
+      </div>
+      <div style={{ fontSize: '0.6rem', color: '#555', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+        {laneState === 'generating' ? 'queue active' : laneState === 'checking' ? 'checking…' : 'idle'}
+      </div>
+    </section>
+  );
+}
+
+// ── Memesis card ─────────────────────────────────────────────────────────────
+
+function MemesisCard({
+  payload,
+  busy,
+  error,
+  onGenerate,
+  onKnown,
+}: {
+  payload: MemesisPayload | null;
+  busy: boolean;
+  error: string | null;
+  onGenerate: () => void;
+  onKnown: (slug: string) => void;
+}) {
+  const row = payload?.row ?? null;
+  const insufficient = payload?.reason === 'insufficient-events' && !row;
+  return (
+    <section
+      style={{
+        background: '#0b0d0c',
+        border: '1px solid #1d2422',
+        borderLeft: '3px solid #3ed9a3',
+        padding: '20px 24px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+        <div style={laneLabelStyle}>today&rsquo;s reading, summarized by the archive</div>
+        <button
+          onClick={onGenerate}
+          disabled={busy}
+          style={{
+            background: 'transparent',
+            border: '1px solid #2a2a2a',
+            color: busy ? '#444' : '#9cd8ba',
+            cursor: busy ? 'wait' : 'pointer',
+            fontSize: '0.55rem',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
+            padding: '6px 12px',
+          }}
+        >
+          {busy ? 'listening…' : row ? 'refresh' : 'synthesize'}
+        </button>
+      </div>
+      <div style={{ marginTop: 12, fontSize: '0.95rem', lineHeight: 1.7, color: '#ddd' }}>
+        {row ? (
+          <SpanRender spans={row.paragraph} onKnown={onKnown} />
+        ) : insufficient ? (
+          <span style={{ color: '#666', fontStyle: 'italic' }}>
+            Not enough clicks yet. Open a few concepts and I&rsquo;ll start noticing a shape.
+          </span>
+        ) : busy ? (
+          <span style={{ color: '#666' }}>Reading your trail…</span>
+        ) : (
+          <span style={{ color: '#666', fontStyle: 'italic' }}>
+            No reflection yet. Hit <em>synthesize</em> when you want the archive to say something
+            back.
+          </span>
+        )}
+      </div>
+      {error && (
+        <div style={{ marginTop: 10, fontSize: '0.66rem', color: '#e06060' }}>
+          memesis error: {error}
+        </div>
+      )}
+      {row && (
+        <div style={{ marginTop: 10, fontSize: '0.55rem', color: '#444', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+          seen {row.event_count} events · {row.generator}
+          {row.model ? ` · ${row.model}` : ''}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SpanRender({ spans, onKnown }: { spans: Span[]; onKnown: (slug: string) => void }) {
+  return (
+    <>
+      {spans.map((span, i) => {
+        if (!('ref' in span)) return <span key={i}>{span.text}</span>;
+        const color = span.kind === 'known' ? '#9cd8ba' : '#d9c46b';
+        return (
+          <button
+            key={i}
+            onClick={() => (span.kind === 'known' ? onKnown(span.ref) : null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              margin: 0,
+              color,
+              textDecoration: 'underline',
+              cursor: span.kind === 'known' ? 'pointer' : 'default',
+              fontSize: 'inherit',
+              fontFamily: 'inherit',
+            }}
+          >
+            {span.text}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+// ── Branch cards ─────────────────────────────────────────────────────────────
 
 function BranchCard({
   branch,
@@ -164,11 +406,14 @@ function BranchCard({
         ? BRANCH_COLORS.pending
         : BRANCH_COLORS.idle;
 
+  const outerColor = branch.id === activeBranchId ? BRANCH_COLORS.active : '#1e1e1e';
   return (
     <div
       style={{
         background: branch.id === activeBranchId ? '#12181b' : '#111',
-        border: `1px solid ${branch.id === activeBranchId ? BRANCH_COLORS.active : '#1e1e1e'}`,
+        borderTop: `1px solid ${outerColor}`,
+        borderRight: `1px solid ${outerColor}`,
+        borderBottom: `1px solid ${outerColor}`,
         borderLeft: `3px solid ${statusColor}`,
         padding: '12px 14px',
         color: '#ddd',
@@ -202,7 +447,15 @@ function BranchCard({
           {branch.unread ? 'new' : branch.status}
         </span>
       </div>
-      <div style={{ fontSize: '0.62rem', color: '#666', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
+      <div
+        style={{
+          fontSize: '0.62rem',
+          color: '#666',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}
+      >
         root {branch.rootSlug}
         {branch.parentBranchId ? ' · child branch' : ' · direct from hud'}
       </div>
@@ -236,7 +489,15 @@ function BranchCard({
                 <div style={{ fontSize: '0.74rem', color: isCurrent ? '#f0f0f0' : '#d8d8d8' }}>
                   {step.slug}
                 </div>
-                <div style={{ fontSize: '0.58rem', color: '#666', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>
+                <div
+                  style={{
+                    fontSize: '0.58rem',
+                    color: '#666',
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    marginTop: 2,
+                  }}
+                >
                   {isFirst ? 'branch root' : `from ${step.fromSlug ?? 'unknown'}`} · {step.source}
                 </div>
               </div>
@@ -263,15 +524,6 @@ function BranchCard({
   );
 }
 
-function StatRow({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-      <div style={{ fontSize: '0.6rem', color: '#666', letterSpacing: '0.14em', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: '1.2rem', color, fontWeight: 300 }}>{value}</div>
-    </div>
-  );
-}
-
 function SectionHeader({ title, accent }: { title: string; accent: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
@@ -290,3 +542,11 @@ function SectionHeader({ title, accent }: { title: string; accent: string }) {
     </div>
   );
 }
+
+const laneLabelStyle: React.CSSProperties = {
+  fontSize: '0.6rem',
+  color: '#666',
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase',
+  marginBottom: 10,
+};
