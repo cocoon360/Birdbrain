@@ -122,8 +122,7 @@ Everything below runs locally against the current branch:
 
 ## What is still partial
 
-Honest list of remaining gaps against the *living-notebook* vision in
-[`docs/ChatQuote.txt`](docs/ChatQuote.txt):
+Honest list of remaining gaps against the living-notebook vision:
 
 - **Bridging brief.** When you navigate A → B, B's dossier uses A as quiet
   peer evidence but does not *write the bridge*. The "this branch reveals
@@ -154,8 +153,6 @@ For live dossier synthesis, install the Cursor Agent CLI and
 different engine adapter under `app/lib/engine/`.
 
 Desktop (Tauri) build: [`RUNNING_THE_PROTOTYPE.md`](RUNNING_THE_PROTOTYPE.md).
-
-Demo path (90 seconds, screen-record ready): [`DEMO.md`](DEMO.md).
 
 ---
 
@@ -226,11 +223,6 @@ birdbrain/
 │   ├── lib/ontology/          startup ontology overview
 │   └── scripts/               ingest, synthesize-prep, eval-dossiers, smoke
 ├── src-tauri/                 desktop shell + sidecar packaging
-├── docs/
-│   ├── JOB                    how to pitch this when hiring
-│   ├── ChatQuote.txt          source-of-truth on the memesis vision
-│   └── FEATURE_NON_MARKDOWN_INGEST.md
-├── DEMO.md                    locked 90-second demo script
 ├── RUNNING_THE_PROTOTYPE.md   web + desktop runbook
 └── README.md                  (this file)
 ```
