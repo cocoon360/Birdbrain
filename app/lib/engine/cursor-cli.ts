@@ -11,14 +11,19 @@ export class CursorCliEngine implements Engine {
   readonly defaultModel: string;
 
   constructor(config: EngineConfig) {
-    this.defaultModel = config.model || process.env.CURSOR_AGENT_MODEL || 'opus-4.7';
+    const fromEnv = process.env.CURSOR_AGENT_MODEL;
+    // First-run default: cheapest Opus 4.7 variant that the cursor-agent
+    // CLI actually accepts. Users can override in the engine drawer.
+    this.defaultModel =
+      (config.model || fromEnv || 'claude-opus-4-7-low').trim() || 'claude-opus-4-7-low';
   }
 
   async generate(options: GenerateOptions): Promise<string> {
     try {
+      const model = (options.model || this.defaultModel || '').trim() || 'claude-opus-4-7-low';
       return await runCursorAgent({
         prompt: options.prompt,
-        model: options.model || this.defaultModel,
+        model,
         timeoutMs: options.timeoutMs,
       });
     } catch (err) {

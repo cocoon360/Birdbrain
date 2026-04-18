@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { getCurrentWorkspace } from '../workspaces/context';
 
 // Low-level wrapper around the Cursor Agent CLI. Invokes it in headless,
 // read-only ask-mode so the model can't touch the filesystem or shell, and
@@ -26,6 +27,8 @@ export interface RunOptions {
   prompt: string;
   timeoutMs?: number;
   model?: string;
+  /** Explicit workspace root; defaults to AsyncLocalStorage workspace when set by HTTP handlers. */
+  workspaceDirectory?: string | null;
 }
 
 // Resolve the absolute path to the cursor-agent binary. We don't assume it's
@@ -36,8 +39,11 @@ function resolveBinary(): string {
   if (explicit && fs.existsSync(explicit)) return explicit;
   const candidates = [
     path.join(os.homedir(), '.local', 'bin', 'cursor-agent'),
+    path.join(os.homedir(), '.local', 'bin', 'agent'),
     '/usr/local/bin/cursor-agent',
+    '/usr/local/bin/agent',
     '/opt/homebrew/bin/cursor-agent',
+    '/opt/homebrew/bin/agent',
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -62,9 +68,30 @@ export function runCursorAgent(options: RunOptions): Promise<string> {
   return promise;
 }
 
-function runOnce({ prompt, timeoutMs = 120_000, model }: RunOptions): Promise<string> {
+/** Match stderr when the requested --model id is wrong for this CLI build. */
+const UNSUPPORTED_MODEL_RE =
+  /cannot use this model|unknown model|invalid model|model .* not found|unsupported model|invalid choice|not an allowed model|unrecognized model/i;
+
+function resolveWorkspaceDir(explicit?: string | null): string | undefined {
+  const fromCtx = getCurrentWorkspace()?.folder_path;
+  const raw = (explicit ?? fromCtx ?? '').trim();
+  if (!raw) return undefined;
+  try {
+    const abs = path.resolve(raw);
+    if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) return abs;
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+function runOnce({ prompt, timeoutMs = 120_000, model, workspaceDirectory }: RunOptions): Promise<string> {
   const bin = resolveBinary();
+  const workspace = resolveWorkspaceDir(workspaceDirectory);
   const args = ['-p', '--mode', 'ask', '--output-format', 'text', '--trust'];
+  if (workspace) {
+    args.push('--workspace', workspace);
+  }
   if (model) args.push('--model', model);
   // The CLI takes the prompt as a trailing positional argument.
   args.push(prompt);
@@ -72,6 +99,7 @@ function runOnce({ prompt, timeoutMs = 120_000, model }: RunOptions): Promise<st
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: workspace,
       env: { ...process.env },
     });
 
@@ -122,13 +150,9 @@ function runOnce({ prompt, timeoutMs = 120_000, model }: RunOptions): Promise<st
         if (code !== 0) {
           const looksLikeAuth =
             /not (?:logged|signed) in|unauthorized|401|authenticate/i.test(stderr + stdout);
-          const unsupportedModel =
-            Boolean(model) &&
-            /unknown model|invalid model|model .* not found|unsupported model|invalid choice/i.test(
-              stderr + stdout
-            );
+          const unsupportedModel = Boolean(model) && UNSUPPORTED_MODEL_RE.test(stderr + stdout);
           if (unsupportedModel) {
-            runOnce({ prompt, timeoutMs }).then(resolve).catch(reject);
+            runOnce({ prompt, timeoutMs, workspaceDirectory }).then(resolve).catch(reject);
             return;
           }
           const errCode = looksLikeAuth ? 'not-logged-in' : 'nonzero-exit';

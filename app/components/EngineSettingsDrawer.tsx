@@ -31,7 +31,7 @@ const PROVIDER_COPY: Record<Provider, { title: string; blurb: string; modelHint:
   'cursor-cli': {
     title: 'Cursor CLI',
     blurb: 'Uses your logged-in cursor-agent binary. No API key needed.',
-    modelHint: 'e.g. opus-4.7, sonnet-4.5',
+    modelHint: 'e.g. auto, claude-opus-4-7-high (run: agent models)',
     keyHint: 'not used (auth via cursor-agent login)',
   },
   openai: {
@@ -76,10 +76,44 @@ export function EngineSettingsDrawer({
   const [secretValue, setSecretValue] = useState('');
   const [savingSecret, setSavingSecret] = useState(false);
   const [hasKeychain, setHasKeychain] = useState(false);
+  type CliModel = { id: string; label: string; note?: string };
+  type CliGroup = { name: string; models: CliModel[] };
+  const [cliGroups, setCliGroups] = useState<CliGroup[]>([]);
+  const [cliAllModels, setCliAllModels] = useState<CliModel[]>([]);
+  const [cliShowAll, setCliShowAll] = useState(false);
+  const [cliModelsLoading, setCliModelsLoading] = useState(false);
+  const [cliModelsError, setCliModelsError] = useState<string | null>(null);
 
   useEffect(() => {
     setHasKeychain(isTauri());
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    if (provider !== 'cursor-cli') return;
+    if (cliAllModels.length > 0) return;
+    setCliModelsLoading(true);
+    setCliModelsError(null);
+    fetch('/api/engine/models', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then(
+        (data: {
+          ok: boolean;
+          groups?: CliGroup[];
+          all?: CliModel[];
+          error?: string;
+        }) => {
+          if (data.ok) {
+            setCliGroups(data.groups || []);
+            setCliAllModels(data.all || []);
+          } else {
+            setCliModelsError(data.error || 'Could not read cursor-agent models.');
+          }
+        }
+      )
+      .catch((e: unknown) => setCliModelsError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setCliModelsLoading(false));
+  }, [open, provider, cliAllModels.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -315,13 +349,78 @@ export function EngineSettingsDrawer({
 
             <div style={{ marginBottom: 16 }}>
               <Label>model</Label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder={copy.modelHint}
-                style={inputStyle}
-              />
+              {provider === 'cursor-cli' ? (
+                <>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                    disabled={cliModelsLoading || cliAllModels.length === 0}
+                  >
+                    <option value="">
+                      {cliModelsLoading
+                        ? 'loading models…'
+                        : cliAllModels.length === 0
+                          ? '(no models available — is cursor-agent installed?)'
+                          : 'auto — use CLI default'}
+                    </option>
+                    {cliShowAll
+                      ? cliAllModels.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label} — {m.id}
+                            {m.note ? ` (${m.note})` : ''}
+                          </option>
+                        ))
+                      : cliGroups.map((group) => (
+                          <optgroup key={group.name} label={group.name}>
+                            {group.models.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label} — {m.id}
+                                {m.note ? ` (${m.note})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                  </select>
+                  {cliModelsError && (
+                    <div style={{ fontSize: '0.66rem', color: '#e74c9b', marginTop: 6, lineHeight: 1.5 }}>
+                      {cliModelsError}
+                    </div>
+                  )}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: '0.66rem',
+                      color: '#888',
+                      marginTop: 10,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={cliShowAll}
+                      onChange={(e) => setCliShowAll(e.target.checked)}
+                    />
+                    show all {cliAllModels.length} models (reasoning tiers, codex, older versions)
+                  </label>
+                  <div style={{ fontSize: '0.66rem', color: '#555', marginTop: 6, lineHeight: 1.5 }}>
+                    Curated list shows the newest few from each provider. Leave on{' '}
+                    <em>auto</em> to let the CLI choose. Opus 4.7 and Sonnet 4.6 are 1M-context
+                    (max mode, expensive); Opus 4.5 and Sonnet 4 are the cheaper standard-context
+                    picks.
+                  </div>
+                </>
+              ) : (
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={copy.modelHint}
+                  style={inputStyle}
+                />
+              )}
             </div>
 
             {(provider === 'ollama' || provider === 'openai' || provider === 'anthropic') && (

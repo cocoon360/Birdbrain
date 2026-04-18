@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withWorkspaceRoute } from '@/lib/workspaces/route';
-import { buildEngine, getEngineForWorkspace, isEngineProvider } from '@/lib/engine';
+import { getProjectMeta } from '@/lib/db/queries';
+import { buildEngine, isEngineProvider, type EngineProvider } from '@/lib/engine';
 
 // Runs a tiny connectivity check against the provided engine config without
-// persisting it. Useful for the Settings panel before the user commits a
-// new provider. Falls back to the saved engine when body is empty.
+// persisting it. Merges the request body with saved workspace meta so an
+// omitted `model` field (JSON drops `undefined`) still tests the saved model.
 
 interface TestBody {
   provider?: string;
@@ -13,23 +14,37 @@ interface TestBody {
   api_key_env?: string;
 }
 
+function resolveEngineConfigForTest(body: TestBody) {
+  const meta = getProjectMeta();
+  const rawProvider = (body.provider ?? meta.engine_provider ?? 'cursor-cli').trim();
+  const provider: EngineProvider = isEngineProvider(rawProvider) ? rawProvider : 'cursor-cli';
+
+  const hasExplicitModel = typeof body.model === 'string' && body.model.trim().length > 0;
+  const model = hasExplicitModel ? body.model!.trim() : meta.engine_model?.trim() || null;
+
+  const hasExplicitEndpoint = typeof body.endpoint === 'string' && body.endpoint.trim().length > 0;
+  const endpoint = hasExplicitEndpoint ? body.endpoint!.trim() : meta.engine_endpoint?.trim() || null;
+
+  const hasExplicitKeyEnv =
+    typeof body.api_key_env === 'string' && body.api_key_env.trim().length > 0;
+  const apiKeyEnvVar = hasExplicitKeyEnv
+    ? body.api_key_env!.trim()
+    : meta.engine_api_key_env?.trim() || null;
+
+  return { provider, model, endpoint, apiKeyEnvVar };
+}
+
 export async function POST(req: NextRequest) {
   return withWorkspaceRoute(req, async () => {
     let body: TestBody = {};
     try {
       body = (await req.json()) as TestBody;
     } catch {
-      // empty body -> test saved engine
+      /* empty body — use saved meta only */
     }
 
-    const engine = body.provider && isEngineProvider(body.provider)
-      ? buildEngine({
-          provider: body.provider,
-          model: body.model,
-          endpoint: body.endpoint,
-          apiKeyEnvVar: body.api_key_env,
-        })
-      : getEngineForWorkspace();
+    const merged = resolveEngineConfigForTest(body);
+    const engine = buildEngine(merged);
 
     if (!engine.test) {
       return NextResponse.json({
