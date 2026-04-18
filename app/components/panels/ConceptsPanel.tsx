@@ -47,26 +47,11 @@ export function ConceptsPanel() {
   }, [concepts, filter]);
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '32px 48px 32px',
-      }}
-    >
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>hypertext</div>
         <h1 className="metro-title">concepts</h1>
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: '0.78rem',
-            color: '#555',
-            maxWidth: 540,
-            lineHeight: 1.5,
-          }}
-        >
+        <p className="metro-lead" style={{ maxWidth: 540 }}>
           Every named concept detected across ingested files. Click a tile to open its dossier:
           primary-path mentions, in-progress overlap, older supporting material, and related concepts.
         </p>
@@ -75,7 +60,7 @@ export function ConceptsPanel() {
       <div
         style={{
           display: 'flex',
-          gap: 8,
+          gap: 4,
           flexShrink: 0,
           marginBottom: 18,
           flexWrap: 'wrap',
@@ -84,17 +69,21 @@ export function ConceptsPanel() {
         {['all', ...TYPE_GROUPS.map((g) => g.type)].map((t) => (
           <button
             key={t}
+            type="button"
             onClick={() => setFilter(t)}
             style={{
-              fontSize: '0.58rem',
-              letterSpacing: '0.14em',
-              padding: '6px 12px',
-              background: filter === t ? '#00b4d8' : 'transparent',
-              color: filter === t ? '#000' : '#777',
-              border: `1px solid ${filter === t ? '#00b4d8' : '#2a2a2a'}`,
+              fontSize: 11,
+              letterSpacing: '0.1em',
+              padding: '6px 10px',
+              background: 'transparent',
+              color: filter === t ? 'var(--accent)' : 'var(--text-dim)',
+              border: '1px solid var(--border)',
+              borderBottomWidth: filter === t ? 3 : 1,
+              borderBottomColor: filter === t ? 'var(--accent)' : 'var(--border)',
               cursor: 'pointer',
               textTransform: 'uppercase',
               fontWeight: 600,
+              transition: 'border-color 150ms ease-out, color 150ms ease-out',
             }}
           >
             {t}
@@ -124,7 +113,7 @@ export function ConceptsPanel() {
                   {group.label}
                 </span>
                 <span style={{ fontSize: '0.62rem', color: '#333' }}>{rows.length}</span>
-                <div style={{ flex: 1, height: 1, background: '#181818' }} />
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               </div>
               <div
                 style={{

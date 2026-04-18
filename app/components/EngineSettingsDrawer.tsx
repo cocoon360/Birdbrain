@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { isTauri, keychainClear, keychainGet, keychainSet } from '@/lib/desktop/tauri-bridge';
+import { chromeButtonStyle, metroFont, space, type } from '@/lib/ui/metro-theme';
 
 type Provider = 'cursor-cli' | 'openai' | 'anthropic' | 'ollama';
 
@@ -259,9 +260,10 @@ export function EngineSettingsDrawer({
         position: 'fixed',
         inset: 0,
         zIndex: 300,
-        background: 'rgba(0,0,0,0.55)',
+        background: 'rgba(0,0,0,0.72)',
         display: 'flex',
         justifyContent: 'flex-end',
+        fontFamily: metroFont,
       }}
       onClick={onClose}
     >
@@ -270,76 +272,79 @@ export function EngineSettingsDrawer({
         style={{
           width: 'min(520px, 96vw)',
           height: '100vh',
-          background: '#0b0b0b',
-          borderLeft: '1px solid #1c1c1c',
-          padding: '32px 32px 28px',
+          background: 'var(--bg)',
+          borderLeft: '1px solid var(--border)',
+          padding: `${space.xl}px ${space.xl}px ${space.lg}px`,
           display: 'flex',
           flexDirection: 'column',
           overflowY: 'auto',
-          color: '#f0f0f0',
+          color: 'var(--text)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: space.md,
+            borderBottom: '1px solid var(--border)',
+            paddingBottom: space.sm,
+          }}
+        >
           <div
+            className="metro-subtitle"
             style={{
-              fontSize: '0.64rem',
-              letterSpacing: '0.22em',
-              color: '#00b4d8',
-              fontWeight: 700,
+              color: 'var(--accent)',
             }}
           >
-            ENGINE SETTINGS
+            engine settings
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: '1px solid #2c2c2c',
-              color: '#888',
-              padding: '6px 10px',
-              fontSize: '0.6rem',
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
+          <button type="button" onClick={onClose} style={chromeButtonStyle({})}>
             close
           </button>
         </div>
 
-        <h2 style={{ fontSize: '2.4rem', fontWeight: 200, letterSpacing: '-0.03em', margin: 0, marginBottom: 8 }}>
-          engine
-        </h2>
-        <div style={{ fontSize: '0.78rem', color: '#888', lineHeight: 1.6, marginBottom: 24 }}>
+        <h2 className="metro-drawer-title">engine</h2>
+        <div
+          style={{
+            fontSize: type.body,
+            color: 'var(--text-dim)',
+            lineHeight: 1.55,
+            marginBottom: space.lg,
+          }}
+        >
           Pick which model Bird Brain calls for synthesis, ontology, and briefs. This is stored on
           the workspace so different projects can use different engines.
         </div>
 
         {loading ? (
-          <div style={{ color: '#666', fontSize: '0.8rem' }}>loading…</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: type.body }}>loading…</div>
         ) : (
           <>
-            <div style={{ marginBottom: 18 }}>
+            <div style={{ marginBottom: space.lg }}>
               <Label>provider</Label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 8 }}>
+              <div
+                className="metro-surface"
+                style={{ marginTop: space.sm, padding: 0, overflow: 'hidden' }}
+              >
                 {(Object.keys(PROVIDER_COPY) as Provider[]).map((p) => (
                   <button
                     key={p}
+                    type="button"
+                    className={`metro-list-row${provider === p ? ' metro-list-row--selected' : ''}`}
                     onClick={() => setProvider(p)}
-                    style={{
-                      textAlign: 'left',
-                      background: provider === p ? '#101d21' : '#0f0f0f',
-                      border: `1px solid ${provider === p ? '#00b4d8' : '#1c1c1c'}`,
-                      padding: '12px 14px',
-                      cursor: 'pointer',
-                      color: '#ddd',
-                    }}
                   >
-                    <div style={{ fontSize: '0.82rem', color: provider === p ? '#00b4d8' : '#f0f0f0', marginBottom: 4 }}>
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 600,
+                        color: provider === p ? 'var(--accent)' : 'var(--text)',
+                        marginBottom: 4,
+                      }}
+                    >
                       {PROVIDER_COPY[p].title}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: '#888', lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.45 }}>
                       {PROVIDER_COPY[p].blurb}
                     </div>
                   </button>
@@ -347,14 +352,15 @@ export function EngineSettingsDrawer({
               </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: space.md }}>
               <Label>model</Label>
               {provider === 'cursor-cli' ? (
                 <>
                   <select
+                    className="metro-input"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    style={{ ...inputStyle, cursor: 'pointer' }}
+                    style={{ marginTop: space.sm, cursor: 'pointer' }}
                     disabled={cliModelsLoading || cliAllModels.length === 0}
                   >
                     <option value="">
@@ -383,7 +389,14 @@ export function EngineSettingsDrawer({
                         ))}
                   </select>
                   {cliModelsError && (
-                    <div style={{ fontSize: '0.66rem', color: '#e74c9b', marginTop: 6, lineHeight: 1.5 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#e74c9b',
+                        marginTop: space.sm,
+                        lineHeight: 1.5,
+                      }}
+                    >
                       {cliModelsError}
                     </div>
                   )}
@@ -391,9 +404,9 @@ export function EngineSettingsDrawer({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
-                      fontSize: '0.66rem',
-                      color: '#888',
+                      gap: space.sm,
+                      fontSize: 12,
+                      color: 'var(--text-dim)',
                       marginTop: 10,
                       cursor: 'pointer',
                     }}
@@ -405,7 +418,14 @@ export function EngineSettingsDrawer({
                     />
                     show all {cliAllModels.length} models (reasoning tiers, codex, older versions)
                   </label>
-                  <div style={{ fontSize: '0.66rem', color: '#555', marginTop: 6, lineHeight: 1.5 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-muted)',
+                      marginTop: space.sm,
+                      lineHeight: 1.5,
+                    }}
+                  >
                     Curated list shows the newest few from each provider. Leave on{' '}
                     <em>auto</em> to let the CLI choose. Opus 4.7 and Sonnet 4.6 are 1M-context
                     (max mode, expensive); Opus 4.5 and Sonnet 4 are the cheaper standard-context
@@ -415,19 +435,21 @@ export function EngineSettingsDrawer({
               ) : (
                 <input
                   type="text"
+                  className="metro-input"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder={copy.modelHint}
-                  style={inputStyle}
+                  style={{ marginTop: space.sm }}
                 />
               )}
             </div>
 
             {(provider === 'ollama' || provider === 'openai' || provider === 'anthropic') && (
-              <div style={{ marginBottom: 16 }}>
+              <div style={{ marginBottom: space.md }}>
                 <Label>endpoint (optional)</Label>
                 <input
                   type="text"
+                  className="metro-input"
                   value={endpoint}
                   onChange={(e) => setEndpoint(e.target.value)}
                   placeholder={
@@ -437,39 +459,49 @@ export function EngineSettingsDrawer({
                       ? 'https://api.openai.com/v1/chat/completions'
                       : 'https://api.anthropic.com/v1/messages'
                   }
-                  style={inputStyle}
+                  style={{ marginTop: space.sm }}
                 />
               </div>
             )}
 
             {(provider === 'openai' || provider === 'anthropic') && (
               <>
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: space.md }}>
                   <Label>api key env var</Label>
                   <input
                     type="text"
+                    className="metro-input"
                     value={apiKeyEnv}
                     onChange={(e) => setApiKeyEnv(e.target.value)}
                     placeholder={copy.keyHint}
-                    style={inputStyle}
+                    style={{ marginTop: space.sm }}
                   />
-                  <div style={{ fontSize: '0.66rem', color: '#555', marginTop: 6, lineHeight: 1.5 }}>
-                    In dev, put the key in <code style={{ color: '#888' }}>.env.local</code>. In the
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-muted)',
+                      marginTop: space.sm,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    In dev, put the key in <code style={{ color: 'var(--text-dim)' }}>.env.local</code>. In the
                     desktop build, the keychain plugin will resolve it automatically.
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 18 }}>
+                <div style={{ marginBottom: space.lg }}>
                   <Label>api key value (stored locally)</Label>
                   <input
                     type="password"
+                    className="metro-input"
                     value={secretValue}
                     onChange={(e) => setSecretValue(e.target.value)}
                     placeholder={secretStatus?.env || secretStatus?.local ? '•••••••• (set)' : 'paste key to store'}
-                    style={inputStyle}
+                    style={{ marginTop: space.sm }}
                   />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: space.sm, marginTop: 10, flexWrap: 'wrap' }}>
                     <button
+                      type="button"
                       onClick={saveSecret}
                       disabled={savingSecret || !secretValue.trim()}
                       style={primaryButton(savingSecret || !secretValue.trim())}
@@ -477,57 +509,63 @@ export function EngineSettingsDrawer({
                       {savingSecret ? 'saving…' : 'store locally'}
                     </button>
                     {secretStatus?.local && (
-                      <button onClick={clearSecret} style={secondaryButton(false)}>
+                      <button type="button" onClick={clearSecret} style={secondaryButton(false)}>
                         clear stored
                       </button>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: '0.66rem', color: '#666' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: space.md,
+                      marginTop: space.sm,
+                      fontSize: 12,
+                      color: 'var(--text-dim)',
+                    }}
+                  >
                     <SourcePill label="env var" ok={secretStatus?.env ?? false} />
                     <SourcePill label="local file" ok={secretStatus?.local ?? false} />
                     <SourcePill label="keychain" ok={secretStatus?.registered ?? false} />
                   </div>
-                  <div style={{ fontSize: '0.64rem', color: '#555', marginTop: 6, lineHeight: 1.5 }}>
-                    Local file lives at <code style={{ color: '#777' }}>~/.birdbrain/secrets.json</code> with
-                    permissions 600. The desktop build overrides this with the OS keychain.
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-muted)',
+                      marginTop: space.sm,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Local file lives at <code style={{ color: 'var(--text-dim)' }}>~/.birdbrain/secrets.json</code>{' '}
+                    with permissions 600. The desktop build overrides this with the OS keychain.
                   </div>
                 </div>
               </>
             )}
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 6, marginBottom: 18, flexWrap: 'wrap' }}>
-              <button onClick={save} disabled={saving || !dirty} style={primaryButton(saving || !dirty)}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 6, marginBottom: space.lg, flexWrap: 'wrap' }}>
+              <button type="button" onClick={save} disabled={saving || !dirty} style={primaryButton(saving || !dirty)}>
                 {saving ? 'saving…' : dirty ? 'save' : 'saved'}
               </button>
-              <button onClick={runTest} disabled={testing} style={secondaryButton(testing)}>
+              <button type="button" onClick={runTest} disabled={testing} style={secondaryButton(testing)}>
                 {testing ? 'testing…' : 'test connection'}
               </button>
             </div>
 
             {test && (
               <div
+                className="metro-surface"
                 style={{
-                  background: '#0f0f0f',
-                  border: `1px solid ${test.ok ? '#1e4d3a' : '#4a1b32'}`,
+                  borderColor: test.ok ? 'color-mix(in srgb, var(--status-canon) 45%, var(--border))' : '#4a1b32',
                   padding: '12px 14px',
                   marginBottom: 10,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: '0.6rem',
-                    letterSpacing: '0.16em',
-                    textTransform: 'uppercase',
-                    fontWeight: 700,
-                    color: test.ok ? '#00d68f' : '#e74c9b',
-                    marginBottom: 6,
-                  }}
-                >
+                <div className="metro-subtitle" style={{ marginBottom: 6, color: test.ok ? 'var(--status-canon)' : '#e74c9b' }}>
                   {test.ok ? 'ok' : 'not ready'}
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#ccc', lineHeight: 1.5 }}>{test.message}</div>
+                <div style={{ fontSize: type.body, color: 'var(--text-dim)', lineHeight: 1.5 }}>{test.message}</div>
                 {test.model && (
-                  <div style={{ fontSize: '0.68rem', color: '#666', marginTop: 6 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>
                     model · {test.model}
                   </div>
                 )}

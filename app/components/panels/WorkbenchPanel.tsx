@@ -154,24 +154,13 @@ export function WorkbenchPanel() {
   }
 
   return (
-    <div
-      style={{ height: '100%', overflowY: 'auto', padding: '32px 48px 48px' }}
-      className="thin-scrollbar"
-    >
+    <div className="metro-panel thin-scrollbar" style={{ height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
       <div style={{ marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
           retrieval + synthesis
         </div>
         <h1 className="metro-title">workbench</h1>
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: '0.78rem',
-            color: '#555',
-            maxWidth: 620,
-            lineHeight: 1.5,
-          }}
-        >
+        <p className="metro-lead">
           Use the top bar for full-text retrieval over ingested files and the second bar for
           Bird Brain questions. Search stays deterministic; asking pulls evidence first, then
           synthesizes or returns a grounded fallback.
@@ -179,40 +168,35 @@ export function WorkbenchPanel() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
-        <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '14px 16px' }}>
-          <div style={{ fontSize: '0.58rem', color: '#666', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
+        <div className="metro-surface" style={{ padding: '14px 16px' }}>
+          <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
             search-style retrieval
           </div>
           <input
+            className="metro-input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search every chunk of every document…"
-            style={{
-              width: '100%',
-              background: '#0b0b0b',
-              border: '1px solid #1e1e1e',
-              color: '#f0f0f0',
-              padding: '14px 18px',
-              fontSize: '0.95rem',
-              outline: 'none',
-              fontFamily: 'inherit',
-            }}
           />
-          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 10, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {['', 'canon', 'working', 'active', 'reference', 'brainstorm', 'archive'].map((status) => (
               <button
                 key={status || 'all'}
+                type="button"
                 onClick={() => setSearchStatus(status)}
                 style={{
-                  fontSize: '0.58rem',
-                  letterSpacing: '0.14em',
-                  padding: '4px 10px',
-                  background: searchStatus === status ? '#00b4d8' : 'transparent',
-                  color: searchStatus === status ? '#000' : '#777',
-                  border: `1px solid ${searchStatus === status ? '#00b4d8' : '#2a2a2a'}`,
+                  fontSize: 11,
+                  letterSpacing: '0.1em',
+                  padding: '6px 10px',
+                  background: 'transparent',
+                  color: searchStatus === status ? 'var(--accent)' : 'var(--text-dim)',
+                  border: '1px solid var(--border)',
+                  borderBottomWidth: searchStatus === status ? 3 : 1,
+                  borderBottomColor: searchStatus === status ? 'var(--accent)' : 'var(--border)',
                   cursor: 'pointer',
                   textTransform: 'uppercase',
                   fontWeight: 600,
+                  transition: 'border-color 150ms ease-out, color 150ms ease-out',
                 }}
               >
                 {documentStatusBadgeLabel(status)}
@@ -221,12 +205,20 @@ export function WorkbenchPanel() {
           </div>
         </div>
 
-        <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '14px 16px' }}>
-          <div style={{ fontSize: '0.58rem', color: '#666', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 10 }}>
+        <div className="metro-surface" style={{ padding: '14px 16px' }}>
+          <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
             question / synthesis
           </div>
-          <div style={{ display: 'flex', gap: 0, border: '1px solid #1e1e1e', background: '#0b0b0b' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 0,
+              border: '1px solid var(--border)',
+              background: 'var(--bg)',
+            }}
+          >
             <input
+              className="metro-input"
               value={askQuery}
               onChange={(e) => setAskQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -235,28 +227,26 @@ export function WorkbenchPanel() {
               placeholder="Ask Bird Brain about your project…"
               style={{
                 flex: 1,
-                background: 'transparent',
                 border: 'none',
-                color: '#f0f0f0',
-                padding: '14px 18px',
-                fontSize: '0.95rem',
-                outline: 'none',
-                fontFamily: 'inherit',
+                borderRadius: 0,
               }}
             />
             <button
+              type="button"
               onClick={() => ask()}
               disabled={askLoading}
               style={{
-                background: askLoading ? '#1a1a1a' : '#00b4d8',
-                color: askLoading ? '#555' : '#000',
+                background: askLoading ? 'var(--surface-2)' : 'var(--accent)',
+                color: askLoading ? 'var(--text-muted)' : '#041015',
                 border: 'none',
-                padding: '0 24px',
-                fontSize: '0.7rem',
+                borderLeft: '1px solid var(--border)',
+                padding: '0 22px',
+                fontSize: 11,
                 fontWeight: 700,
-                letterSpacing: '0.16em',
+                letterSpacing: '0.12em',
                 cursor: askLoading ? 'wait' : 'pointer',
                 textTransform: 'uppercase',
+                flexShrink: 0,
               }}
             >
               {askLoading ? '…' : 'Ask'}
@@ -266,14 +256,16 @@ export function WorkbenchPanel() {
             {examples.map((q) => (
               <button
                 key={q}
+                type="button"
                 onClick={() => ask(q)}
                 style={{
-                  fontSize: '0.68rem',
-                  color: '#888',
+                  fontSize: 13,
+                  color: 'var(--text-dim)',
                   background: 'transparent',
-                  border: '1px solid #222',
-                  padding: '4px 10px',
+                  border: '1px solid var(--border)',
+                  padding: '5px 10px',
                   cursor: 'pointer',
+                  textAlign: 'left',
                 }}
               >
                 {q}
@@ -281,7 +273,7 @@ export function WorkbenchPanel() {
             ))}
           </div>
           {askError && (
-            <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#e74c3c' }}>{askError}</div>
+            <div style={{ marginTop: 8, fontSize: 14, color: '#e74c3c' }}>{askError}</div>
           )}
         </div>
       </div>
@@ -448,7 +440,7 @@ function SectionHeader({ title, accent }: { title: string; accent: string }) {
       >
         {title}
       </span>
-      <div style={{ flex: 1, height: 1, background: '#181818' }} />
+      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
     </div>
   );
 }

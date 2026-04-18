@@ -140,24 +140,13 @@ export function DatalogPanel() {
   const unread = branches.filter((branch) => branch.unread).length;
 
   return (
-    <div
-      style={{ height: '100%', overflowY: 'auto', padding: '32px 48px 56px' }}
-      className="thin-scrollbar"
-    >
+    <div className="metro-panel thin-scrollbar" style={{ height: '100%', overflowY: 'auto', paddingBottom: 48 }}>
       <div style={{ marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
           the archive, watching back
         </div>
         <h1 className="metro-title">datalog</h1>
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: '0.78rem',
-            color: '#555',
-            maxWidth: 620,
-            lineHeight: 1.55,
-          }}
-        >
+        <p className="metro-lead">
           Today&rsquo;s reading, summarized by the archive. Status and branches follow.
         </p>
       </div>

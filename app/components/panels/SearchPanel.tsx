@@ -70,14 +70,7 @@ export function SearchPanel() {
   }, [query, status]);
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '32px 48px 32px',
-      }}
-    >
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, marginBottom: 16 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>full-text fts5</div>
         <h1 className="metro-title">search</h1>
@@ -85,35 +78,30 @@ export function SearchPanel() {
 
       <div style={{ flexShrink: 0, marginBottom: 14 }}>
         <input
+          className="metro-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search every chunk of every document…"
-          style={{
-            width: '100%',
-            background: '#0f0f0f',
-            border: '1px solid #1e1e1e',
-            color: '#f0f0f0',
-            padding: '14px 18px',
-            fontSize: '0.95rem',
-            outline: 'none',
-            fontFamily: 'inherit',
-          }}
         />
-        <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 10, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {['', 'canon', 'working', 'active', 'reference', 'brainstorm', 'archive'].map((s) => (
             <button
               key={s || 'all'}
+              type="button"
               onClick={() => setStatus(s)}
               style={{
-                fontSize: '0.58rem',
-                letterSpacing: '0.14em',
-                padding: '4px 10px',
-                background: status === s ? '#00b4d8' : 'transparent',
-                color: status === s ? '#000' : '#777',
-                border: `1px solid ${status === s ? '#00b4d8' : '#2a2a2a'}`,
+                fontSize: 11,
+                letterSpacing: '0.1em',
+                padding: '6px 10px',
+                background: 'transparent',
+                color: status === s ? 'var(--accent)' : 'var(--text-dim)',
+                border: '1px solid var(--border)',
+                borderBottomWidth: status === s ? 3 : 1,
+                borderBottomColor: status === s ? 'var(--accent)' : 'var(--border)',
                 cursor: 'pointer',
                 textTransform: 'uppercase',
                 fontWeight: 600,
+                transition: 'border-color 150ms ease-out, color 150ms ease-out',
               }}
             >
               {documentStatusBadgeLabel(s)}
@@ -149,12 +137,12 @@ export function SearchPanel() {
                 onClick={() => openDoc(r.document_id)}
                 style={{
                   textAlign: 'left',
-                  background: '#0f0f0f',
-                  border: '1px solid #181818',
-                  borderLeft: `2px solid ${color}`,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderLeft: `3px solid ${color}`,
                   padding: '10px 14px',
                   cursor: 'pointer',
-                  color: '#ddd',
+                  color: 'var(--text)',
                 }}
               >
                 <div

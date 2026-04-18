@@ -189,12 +189,12 @@ export function HubPanel() {
                   onClick={() => openConcept(e.slug, { branch: 'new', source: 'root', label: e.name })}
                   style={{
                     textAlign: 'left',
-                    background: '#111',
-                    border: '1px solid #1e1e1e',
-                    borderLeft: '2px solid #e74c9b',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderLeft: '3px solid #e74c9b',
                     padding: '12px 14px',
                     cursor: 'pointer',
-                    color: '#ddd',
+                    color: 'var(--text)',
                   }}
                 >
                   <div style={{ fontSize: '0.85rem', color: '#f0f0f0', marginBottom: 4 }}>
@@ -224,12 +224,12 @@ export function HubPanel() {
                   onClick={() => openBranch(branch.id)}
                   style={{
                     textAlign: 'left',
-                    background: '#111',
-                    border: '1px solid #1e1e1e',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
                     borderLeft: `3px solid ${branch.unread ? BRANCH_COLORS.new : branch.status === 'ready' ? BRANCH_COLORS.ready : branch.status === 'pending' ? BRANCH_COLORS.pending : BRANCH_COLORS.idle}`,
                     padding: '12px 14px',
                     cursor: 'pointer',
-                    color: '#ddd',
+                    color: 'var(--text)',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
@@ -300,7 +300,7 @@ function SectionHeader({ title, accent = '#888' }: { title: string; accent?: str
       >
         {title}
       </span>
-      <div style={{ flex: 1, height: 1, background: '#181818' }} />
+      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
     </div>
   );
 }

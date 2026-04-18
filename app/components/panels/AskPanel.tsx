@@ -78,26 +78,11 @@ export function AskPanel() {
   }
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '32px 48px 32px',
-      }}
-    >
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>retrieval first</div>
         <h1 className="metro-title">ask</h1>
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: '0.78rem',
-            color: '#555',
-            maxWidth: 540,
-            lineHeight: 1.5,
-          }}
-        >
+        <p className="metro-lead" style={{ maxWidth: 540 }}>
           Ask anything. Bird Brain pulls the most relevant chunks first (ranking favors primary-folder
           and in-progress material), then either answers deterministically (typed lists, etc.) or
           synthesizes with the configured model. Every claim is cited to a real ingested file.
@@ -109,11 +94,12 @@ export function AskPanel() {
           style={{
             display: 'flex',
             gap: 0,
-            border: '1px solid #1e1e1e',
-            background: '#0f0f0f',
+            border: '1px solid var(--border)',
+            background: 'var(--bg)',
           }}
         >
           <input
+            className="metro-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -122,28 +108,26 @@ export function AskPanel() {
             placeholder="Ask Bird Brain about your project…"
             style={{
               flex: 1,
-              background: 'transparent',
               border: 'none',
-              color: '#f0f0f0',
-              padding: '14px 18px',
-              fontSize: '0.95rem',
-              outline: 'none',
-              fontFamily: 'inherit',
+              borderRadius: 0,
             }}
           />
           <button
+            type="button"
             onClick={() => ask()}
             disabled={loading}
             style={{
-              background: loading ? '#1a1a1a' : '#00b4d8',
-              color: loading ? '#555' : '#000',
+              background: loading ? 'var(--surface-2)' : 'var(--accent)',
+              color: loading ? 'var(--text-muted)' : '#041015',
               border: 'none',
-              padding: '0 24px',
-              fontSize: '0.7rem',
+              borderLeft: '1px solid var(--border)',
+              padding: '0 22px',
+              fontSize: 11,
               fontWeight: 700,
-              letterSpacing: '0.16em',
+              letterSpacing: '0.12em',
               cursor: loading ? 'wait' : 'pointer',
               textTransform: 'uppercase',
+              flexShrink: 0,
             }}
           >
             {loading ? '…' : 'Ask'}
@@ -160,14 +144,16 @@ export function AskPanel() {
           {examples.map((q) => (
             <button
               key={q}
+              type="button"
               onClick={() => ask(q)}
               style={{
-                fontSize: '0.68rem',
-                color: '#888',
+                fontSize: 13,
+                color: 'var(--text-dim)',
                 background: 'transparent',
-                border: '1px solid #222',
-                padding: '4px 10px',
+                border: '1px solid var(--border)',
+                padding: '5px 10px',
                 cursor: 'pointer',
+                textAlign: 'left',
               }}
             >
               {q}
@@ -175,7 +161,7 @@ export function AskPanel() {
           ))}
         </div>
         {error && (
-          <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#e74c3c' }}>{error}</div>
+          <div style={{ marginTop: 8, fontSize: 14, color: '#e74c3c' }}>{error}</div>
         )}
       </div>
 

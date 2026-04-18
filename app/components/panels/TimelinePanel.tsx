@@ -39,26 +39,11 @@ export function TimelinePanel() {
   }, [docs]);
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '32px 48px 32px',
-      }}
-    >
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>what changed</div>
         <h1 className="metro-title">timeline</h1>
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: '0.78rem',
-            color: '#555',
-            maxWidth: 540,
-            lineHeight: 1.5,
-          }}
-        >
+        <p className="metro-lead" style={{ maxWidth: 540 }}>
           Documents in modification order. Useful for catching up on recent decisions and spotting
           drift across days.
         </p>
@@ -71,13 +56,10 @@ export function TimelinePanel() {
         {Object.entries(grouped).map(([date, rows]) => (
           <div key={date} style={{ marginBottom: 22 }}>
             <div
+              className="metro-subtitle"
               style={{
-                fontSize: '0.62rem',
-                fontWeight: 700,
-                letterSpacing: '0.18em',
-                color: '#00b4d8',
-                textTransform: 'uppercase',
                 marginBottom: 10,
+                color: 'var(--accent)',
               }}
             >
               {date}
