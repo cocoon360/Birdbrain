@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   path TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'unknown',  -- canon, working, active, archive, brainstorm, reference
-  category TEXT NOT NULL DEFAULT 'general', -- character, world, systems, incidents, content, general
+  status TEXT NOT NULL DEFAULT 'unknown',   -- canon, working, active, archive, brainstorm, reference
+  category TEXT NOT NULL DEFAULT 'general', -- derived from folder name, project-agnostic
   word_count INTEGER DEFAULT 0,
-  file_mtime INTEGER NOT NULL,             -- unix timestamp from file system
-  ingested_at INTEGER NOT NULL             -- unix timestamp of last ingestion
+  file_mtime INTEGER NOT NULL,              -- unix timestamp from file system
+  ingested_at INTEGER NOT NULL,             -- unix timestamp of last ingestion
+  source_kind TEXT NOT NULL DEFAULT 'markdown',  -- markdown | text | svg
+  source_ext TEXT NOT NULL DEFAULT '.md'         -- lowercased extension, incl. dot
 );
 
 -- Heading-delimited chunks from each document

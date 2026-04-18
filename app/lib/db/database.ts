@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS documents (
   category TEXT NOT NULL DEFAULT 'general',
   word_count INTEGER DEFAULT 0,
   file_mtime INTEGER NOT NULL,
-  ingested_at INTEGER NOT NULL
+  ingested_at INTEGER NOT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'markdown',  -- markdown | text | svg
+  source_ext TEXT NOT NULL DEFAULT '.md'         -- lowercased extension, incl. dot
 );
 
 CREATE TABLE IF NOT EXISTS chunks (
@@ -124,6 +126,25 @@ CREATE TABLE IF NOT EXISTS concept_synthesis_cache (
   UNIQUE(entity_id, profile)
 );
 
+-- Bird's-eye concept context cached separately from the final dossier prose.
+-- This lets dossier synthesis reuse a project-level framing layer instead of
+-- re-deriving the concept's role from raw snippets on every open/regenerate.
+CREATE TABLE IF NOT EXISTS concept_precontext_cache (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  corpus_signature TEXT NOT NULL,
+  plain_definition TEXT NOT NULL,
+  project_role TEXT NOT NULL,
+  study_relevance TEXT NOT NULL,
+  related_concepts_json TEXT NOT NULL DEFAULT '[]',
+  precontext_text TEXT NOT NULL,
+  generator TEXT NOT NULL DEFAULT 'cursor-agent',
+  model TEXT,
+  generated_at INTEGER NOT NULL,
+  UNIQUE(entity_id, corpus_signature)
+);
+CREATE INDEX IF NOT EXISTS idx_concept_precontext_entity ON concept_precontext_cache(entity_id);
+
 -- Queue of phrases the user clicked on that still need synthesis.
 CREATE TABLE IF NOT EXISTS synthesis_queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,6 +156,72 @@ CREATE TABLE IF NOT EXISTS synthesis_queue (
   status TEXT NOT NULL DEFAULT 'pending',
   UNIQUE(entity_id)
 );
+
+-- ── Memesis / living-notebook layer ────────────────────────────────────────
+-- The panorama's Datalog panel reads from these three tables. None of them
+-- are required for ingest or synthesis to work — they only light up once the
+-- reader starts clicking around.
+
+-- One row per reading session. A new session is started client-side after
+-- ~30 minutes of idle; sessions are never cleaned up (a session is an audit
+-- record of a reading, not an ephemeral handle).
+CREATE TABLE IF NOT EXISTS participation_sessions (
+  id TEXT PRIMARY KEY,
+  started_at INTEGER NOT NULL,
+  last_at INTEGER NOT NULL
+);
+
+-- Every click / resolve / ask that counts as the reader attending to
+-- something. Fire-and-forget inserts from /api/participation/event. The
+-- Datalog panel's trail is a SELECT over the last N rows of this table.
+CREATE TABLE IF NOT EXISTS participation_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES participation_sessions(id) ON DELETE CASCADE,
+  at INTEGER NOT NULL,
+  kind TEXT NOT NULL,         -- open_concept | open_doc | impression | promote | dismiss | ask | search | reset | memesis
+  slug TEXT,                  -- concept slug when relevant
+  from_slug TEXT,             -- peer concept for bridging
+  phrase TEXT,                -- free-text phrase for impressions / candidates
+  doc_id INTEGER,             -- doc id when openDoc
+  source TEXT                 -- where the click came from (tile/pill/prose/related/…)
+);
+CREATE INDEX IF NOT EXISTS idx_events_session_at ON participation_events(session_id, at);
+CREATE INDEX IF NOT EXISTS idx_events_kind_at ON participation_events(kind, at);
+CREATE INDEX IF NOT EXISTS idx_events_slug ON participation_events(slug);
+
+-- Attention-weighted candidates. A candidate lives here the moment the LLM
+-- emits a candidate span in a dossier paragraph (impression) and again
+-- whenever a reader clicks one (click). Promotion and dismissal are recorded
+-- via status. co_concepts_json is a JSON array of peer slugs the
+-- candidate has been seen alongside — that is the co-click material that
+-- ChatQuote calls "SQL earning its keep".
+CREATE TABLE IF NOT EXISTS candidate_concepts (
+  slug TEXT PRIMARY KEY,
+  phrase TEXT NOT NULL,
+  first_seen INTEGER NOT NULL,
+  last_seen INTEGER NOT NULL,
+  impressions INTEGER NOT NULL DEFAULT 0,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  distinct_sessions INTEGER NOT NULL DEFAULT 0,
+  session_ids_json TEXT NOT NULL DEFAULT '[]',
+  co_concepts_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'watching'  -- watching | promoted | dismissed
+);
+CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidate_concepts(status);
+
+-- The session synthesis paragraph — "the archive gossiping about you". One
+-- row per (session, generated_at) so you can scroll back through how the
+-- tool's running interpretation of your attention evolved.
+CREATE TABLE IF NOT EXISTS session_synthesis (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL REFERENCES participation_sessions(id) ON DELETE CASCADE,
+  paragraph_json TEXT NOT NULL,
+  generator TEXT NOT NULL DEFAULT 'cursor-agent',
+  model TEXT,
+  event_count INTEGER NOT NULL,
+  generated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_synth_at ON session_synthesis(session_id, generated_at DESC);
 
 CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
   INSERT INTO chunks_fts(rowid, body, heading)
@@ -177,6 +264,7 @@ function openDb(dbPath: string): Database.Database {
   migrateEntities(db);
   migrateSynthesisCache(db);
   migrateSynthesisQueue(db);
+  migrateDocumentsSource(db);
   return db;
 }
 
@@ -265,5 +353,19 @@ function migrateSynthesisQueue(db: Database.Database) {
   }
   if (!names.has('profile')) {
     db.exec("ALTER TABLE synthesis_queue ADD COLUMN profile TEXT NOT NULL DEFAULT 'queued'");
+  }
+}
+
+// Tier 1.5: documents grew a source_kind + source_ext column so we can
+// remember how each row was parsed (markdown vs text vs svg). Existing rows
+// all came from markdown ingest, so we default-fill them accordingly.
+function migrateDocumentsSource(db: Database.Database) {
+  const cols = db.prepare('PRAGMA table_info(documents)').all() as Array<{ name: string }>;
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has('source_kind')) {
+    db.exec("ALTER TABLE documents ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'markdown'");
+  }
+  if (!names.has('source_ext')) {
+    db.exec("ALTER TABLE documents ADD COLUMN source_ext TEXT NOT NULL DEFAULT '.md'");
   }
 }

@@ -2,7 +2,9 @@ import { getDb } from '../db/database';
 import {
   clearStaleGeneratedArtifacts,
   completeOntologyRun,
+  enqueueSynthesis,
   failOntologyRun,
+  getEntityBySlug,
   getProjectMeta,
   getStartupStatus,
   replaceOntologyArtifacts,
@@ -76,6 +78,7 @@ export async function rebuildOntology(startupMode: StartupMode) {
       summaryText: overview.project_summary,
       overviewJson: JSON.stringify(overview),
     });
+    queueStarterLensWarmup(lenses);
     setProjectMetaValue('ontology_last_success_signature', corpusSignature);
     return { runId, overview, concepts, lenses };
   } catch (error) {
@@ -644,6 +647,7 @@ function syncRuntimeOntologyConcepts(concepts: OntologyConceptRow[]) {
     }
 
     db.prepare(`DELETE FROM entity_mentions`).run();
+    db.prepare(`DELETE FROM concept_precontext_cache`).run();
     db.prepare(`DELETE FROM concept_synthesis_cache`).run();
     db.prepare(`DELETE FROM synthesis_queue`).run();
     db.prepare(
@@ -672,6 +676,24 @@ function syncRuntimeOntologyConcepts(concepts: OntologyConceptRow[]) {
       }
     }
   })();
+}
+
+function queueStarterLensWarmup(lenses: StarterLensRow[]) {
+  const seen = new Set<string>();
+  for (const lens of lenses) {
+    if (seen.has(lens.concept_slug)) continue;
+    seen.add(lens.concept_slug);
+    const entity = getEntityBySlug(lens.concept_slug);
+    if (!entity) continue;
+    // Warm the queued lane for first-stop concepts so their precontext +
+    // dossier prose can be backfilled without waiting for a manual regenerate.
+    enqueueSynthesis({
+      entityId: entity.id,
+      contextSlug: null,
+      rootSlug: entity.slug,
+      profile: 'queued',
+    });
+  }
 }
 
 function safeJsonArray(value: string): string[] {

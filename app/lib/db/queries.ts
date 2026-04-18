@@ -30,6 +30,7 @@ export interface SearchResult {
   doc_path: string;
   doc_status: string;
   doc_category: string;
+  doc_source_kind: string;
   heading: string | null;
   snippet: string;
   sort_score: number;
@@ -57,6 +58,7 @@ export interface EntityEvidenceRow {
   entity_slug: string;
   entity_name: string;
   entity_type: string;
+  chunk_id: number;
   doc_id: number;
   doc_title: string;
   doc_path: string;
@@ -65,6 +67,17 @@ export interface EntityEvidenceRow {
   body: string;
   match_count: number;
   file_mtime: number;
+}
+
+/** Full chunk + doc metadata for synthesis retrieval (neighbors / FTS). */
+export interface SynthesisChunkRow {
+  chunk_id: number;
+  doc_id: number;
+  doc_title: string;
+  doc_path: string;
+  doc_status: string;
+  heading: string | null;
+  body: string;
 }
 
 export interface AlertRow {
@@ -105,7 +118,7 @@ export function getEntitiesByType(type: string): EntityRow[] {
   return getEntities(type, 500);
 }
 
-function buildMatchQuery(query: string): string {
+export function buildMatchQuery(query: string): string {
   const cleaned = query
     .trim()
     .replace(/[^\w\s"-]/g, ' ')
@@ -193,6 +206,7 @@ export function searchRelevantChunks(
       d.path AS doc_path,
       d.status AS doc_status,
       d.category AS doc_category,
+      d.source_kind AS doc_source_kind,
       c.heading,
       snippet(chunks_fts, 0, '<mark>', '</mark>', '…', 24) AS snippet,
       (${statusPrioritySql()} * 10.0 + bm25(chunks_fts)) AS sort_score
@@ -268,6 +282,7 @@ export function getEntityMentions(slug: string, limit = 18): EntityEvidenceRow[]
         e.slug AS entity_slug,
         e.name AS entity_name,
         e.type AS entity_type,
+        c.id AS chunk_id,
         d.id AS doc_id,
         d.title AS doc_title,
         d.path AS doc_path,
@@ -286,6 +301,171 @@ export function getEntityMentions(slug: string, limit = 18): EntityEvidenceRow[]
     `
     )
     .all(slug, limit) as EntityEvidenceRow[];
+}
+
+function docStatusOrder(status: string): number {
+  switch (status) {
+    case 'canon':
+      return 0;
+    case 'working':
+      return 1;
+    case 'active':
+      return 2;
+    case 'reference':
+      return 3;
+    case 'brainstorm':
+      return 4;
+    case 'archive':
+      return 5;
+    default:
+      return 6;
+  }
+}
+
+/**
+ * Chunks in the same document(s) as `seedChunkIds`, within ±radial of each seed's
+ * chunk_index. Excludes any chunk whose id is in `excludeChunkIds` (typically
+ * direct entity-mention chunks).
+ */
+export function getNeighborChunksForSynthesis(
+  seedChunkIds: number[],
+  excludeChunkIds: ReadonlySet<number>,
+  radial: number
+): SynthesisChunkRow[] {
+  if (seedChunkIds.length === 0) return [];
+  try {
+    const db = getDb();
+    const placeholders = seedChunkIds.map(() => '?').join(',');
+    const seeds = db
+      .prepare(`SELECT document_id, chunk_index FROM chunks WHERE id IN (${placeholders})`)
+      .all(...seedChunkIds) as { document_id: number; chunk_index: number }[];
+
+    const byDoc = new Map<number, Set<number>>();
+    for (const s of seeds) {
+      let set = byDoc.get(s.document_id);
+      if (!set) {
+        set = new Set();
+        byDoc.set(s.document_id, set);
+      }
+      for (let i = s.chunk_index - radial; i <= s.chunk_index + radial; i++) {
+        if (i >= 0) set.add(i);
+      }
+    }
+
+    const out: SynthesisChunkRow[] = [];
+    const seen = new Set<number>();
+
+    for (const [documentId, indices] of byDoc) {
+      const idxList = [...indices];
+      if (idxList.length === 0) continue;
+      const ph = idxList.map(() => '?').join(',');
+      const rows = db
+        .prepare(
+          `
+        SELECT
+          c.id AS chunk_id,
+          c.document_id AS doc_id,
+          d.title AS doc_title,
+          d.path AS doc_path,
+          d.status AS doc_status,
+          c.heading,
+          c.body
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        WHERE c.document_id = ? AND c.chunk_index IN (${ph})
+      `
+        )
+        .all(documentId, ...idxList) as SynthesisChunkRow[];
+
+      for (const r of rows) {
+        if (excludeChunkIds.has(r.chunk_id)) continue;
+        if (seen.has(r.chunk_id)) continue;
+        seen.add(r.chunk_id);
+        out.push(r);
+      }
+    }
+
+    out.sort((a, b) => {
+      const pa = docStatusOrder(a.doc_status);
+      const pb = docStatusOrder(b.doc_status);
+      if (pa !== pb) return pa - pb;
+      return a.doc_path.localeCompare(b.doc_path);
+    });
+    return out;
+  } catch (e) {
+    console.error('[getNeighborChunksForSynthesis]', e);
+    return [];
+  }
+}
+
+/**
+ * Lexical recall over chunks_fts for synthesis. Excludes known chunk ids;
+ * returns full chunk bodies (not HTML snippets).
+ */
+/** Keep FTS query short — very long MATCH strings can error or slow SQLite badly. */
+const SYNTHESIS_FTS_QUERY_MAX_CHARS = 240;
+
+export function searchChunksFtsForSynthesis(
+  query: string,
+  options: { limit: number; excludeChunkIds: ReadonlySet<number>; documentIds?: number[] }
+): SynthesisChunkRow[] {
+  const clipped = query.trim().slice(0, SYNTHESIS_FTS_QUERY_MAX_CHARS);
+  const matchQuery = buildMatchQuery(clipped);
+  if (!matchQuery) return [];
+
+  try {
+    const db = getDb();
+    const params: Array<string | number> = [matchQuery];
+    let sql = `
+    SELECT
+      c.id AS chunk_id,
+      c.document_id AS doc_id,
+      d.title AS doc_title,
+      d.path AS doc_path,
+      d.status AS doc_status,
+      c.heading,
+      c.body,
+      (${statusPrioritySql()} * 10.0 + bm25(chunks_fts)) AS sort_score
+    FROM chunks_fts
+    JOIN chunks c ON c.id = chunks_fts.rowid
+    JOIN documents d ON d.id = c.document_id
+    WHERE chunks_fts MATCH ?
+  `;
+
+    if (options.documentIds?.length) {
+      sql += ` AND d.id IN (${options.documentIds.map(() => '?').join(',')})`;
+      params.push(...options.documentIds);
+    }
+
+    if (options.excludeChunkIds.size > 0) {
+      const ids = [...options.excludeChunkIds];
+      sql += ` AND c.id NOT IN (${ids.map(() => '?').join(',')})`;
+      params.push(...ids);
+    }
+
+    sql += ' ORDER BY sort_score ASC, d.file_mtime DESC LIMIT ?';
+    params.push(Math.max(options.limit * 4, options.limit));
+
+    const rows = db.prepare(sql).all(...params) as Array<SynthesisChunkRow & { sort_score: number }>;
+    const out: SynthesisChunkRow[] = [];
+    for (const r of rows) {
+      if (options.excludeChunkIds.has(r.chunk_id)) continue;
+      out.push({
+        chunk_id: r.chunk_id,
+        doc_id: r.doc_id,
+        doc_title: r.doc_title,
+        doc_path: r.doc_path,
+        doc_status: r.doc_status,
+        heading: r.heading,
+        body: r.body,
+      });
+      if (out.length >= options.limit) break;
+    }
+    return out;
+  } catch (e) {
+    console.error('[searchChunksFtsForSynthesis]', matchQuery.slice(0, 80), e);
+    return [];
+  }
 }
 
 export function getDocumentEntityMentions(documentId: number): EntityMentionRow[] {
@@ -349,22 +529,25 @@ export function getAlerts(limit = 12): AlertRow[] {
       alerts.push({
         kind: 'no-canon-anchor',
         entity_slug: row.slug,
-        title: `${row.name} has working activity but no canon anchor`,
-        description: 'This concept appears in working material but is not grounded in canon docs yet.',
+        title: `${row.name} shows up in progress-only paths`,
+        description:
+          'This concept appears in in-progress or exploratory material but not yet under primary-folder paths.',
       });
     } else if (row.working_docs >= 2 && row.canon_docs >= 1) {
       alerts.push({
         kind: 'working-drift',
         entity_slug: row.slug,
         title: `${row.name} is actively evolving`,
-        description: 'This concept appears in both canon and working docs, so it may need explicit comparison.',
+        description:
+          'This concept appears under both primary-folder and in-progress paths — worth comparing versions.',
       });
     } else if (row.document_count >= 6 && row.canon_docs <= 1) {
       alerts.push({
         kind: 'archive-shadow',
         entity_slug: row.slug,
-        title: `${row.name} has lots of history but weak current grounding`,
-        description: 'The concept is spread across many documents, but little of that weight is in canon.',
+        title: `${row.name} is mentioned widely with thin primary grounding`,
+        description:
+          'The concept is spread across many files, but few mentions sit under primary-folder paths.',
       });
     }
   }
@@ -527,6 +710,7 @@ export function clearStaleGeneratedArtifacts(input: {
   }
 
   db.transaction(() => {
+    db.prepare(`DELETE FROM concept_precontext_cache`).run();
     db.prepare(`DELETE FROM concept_synthesis_cache`).run();
     db.prepare(`DELETE FROM synthesis_queue`).run();
     db.prepare(
@@ -770,6 +954,107 @@ export interface SynthesisRow {
   generated_at: number;
 }
 
+export interface ConceptPrecontextRow {
+  entity_id: number;
+  corpus_signature: string;
+  plain_definition: string;
+  project_role: string;
+  study_relevance: string;
+  related_concepts: string[];
+  precontext_text: string;
+  generator: string;
+  model: string | null;
+  generated_at: number;
+}
+
+export function getPrecontextForSlug(slug: string): ConceptPrecontextRow | null {
+  const db = getDb();
+  const corpusSignature = getProjectMeta().corpus_signature;
+  if (!corpusSignature) return null;
+  const row = db
+    .prepare(
+      `SELECT cp.entity_id, cp.corpus_signature, cp.plain_definition, cp.project_role,
+              cp.study_relevance, cp.related_concepts_json, cp.precontext_text,
+              cp.generator, cp.model, cp.generated_at
+       FROM concept_precontext_cache cp
+       JOIN entities e ON e.id = cp.entity_id
+       WHERE e.slug = ? AND cp.corpus_signature = ?`
+    )
+    .get(slug, corpusSignature) as
+    | {
+        entity_id: number;
+        corpus_signature: string;
+        plain_definition: string;
+        project_role: string;
+        study_relevance: string;
+        related_concepts_json: string;
+        precontext_text: string;
+        generator: string;
+        model: string | null;
+        generated_at: number;
+      }
+    | undefined;
+  if (!row) return null;
+  return {
+    entity_id: row.entity_id,
+    corpus_signature: row.corpus_signature,
+    plain_definition: row.plain_definition,
+    project_role: row.project_role,
+    study_relevance: row.study_relevance,
+    related_concepts: safeJsonArray(row.related_concepts_json),
+    precontext_text: row.precontext_text,
+    generator: row.generator,
+    model: row.model,
+    generated_at: row.generated_at,
+  };
+}
+
+export function upsertPrecontext(input: {
+  entityId: number;
+  corpusSignature: string;
+  plainDefinition: string;
+  projectRole: string;
+  studyRelevance: string;
+  relatedConcepts: string[];
+  precontextText: string;
+  generator: string;
+  model?: string | null;
+}) {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO concept_precontext_cache
+      (entity_id, corpus_signature, plain_definition, project_role, study_relevance,
+       related_concepts_json, precontext_text, generator, model, generated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(entity_id, corpus_signature) DO UPDATE SET
+       plain_definition = excluded.plain_definition,
+       project_role = excluded.project_role,
+       study_relevance = excluded.study_relevance,
+       related_concepts_json = excluded.related_concepts_json,
+       precontext_text = excluded.precontext_text,
+       generator = excluded.generator,
+       model = excluded.model,
+       generated_at = excluded.generated_at`
+  ).run(
+    input.entityId,
+    input.corpusSignature,
+    input.plainDefinition,
+    input.projectRole,
+    input.studyRelevance,
+    JSON.stringify(input.relatedConcepts),
+    input.precontextText,
+    input.generator,
+    input.model ?? null,
+    Math.floor(Date.now() / 1000)
+  );
+}
+
+export function deletePrecontextForSlug(slug: string) {
+  const entity = getEntityBySlug(slug);
+  if (!entity) return;
+  getDb().prepare('DELETE FROM concept_precontext_cache WHERE entity_id = ?').run(entity.id);
+}
+
 export function getSynthesisForSlug(slug: string, profile = 'live'): SynthesisRow | null {
   const db = getDb();
   const row = db
@@ -805,6 +1090,21 @@ export function getSynthesisForSlug(slug: string, profile = 'live'): SynthesisRo
     model: row.model,
     generated_at: row.generated_at,
   };
+}
+
+/** Remove cached synthesis so the next fetch or regenerate runs a fresh LLM pass. */
+export function deleteSynthesisCacheForSlug(slug: string, profile?: string) {
+  const entity = getEntityBySlug(slug);
+  if (!entity) return;
+  const db = getDb();
+  if (profile) {
+    db.prepare('DELETE FROM concept_synthesis_cache WHERE entity_id = ? AND profile = ?').run(
+      entity.id,
+      profile
+    );
+  } else {
+    db.prepare('DELETE FROM concept_synthesis_cache WHERE entity_id = ?').run(entity.id);
+  }
 }
 
 export function upsertSynthesis(input: {
