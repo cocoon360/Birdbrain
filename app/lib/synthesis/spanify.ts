@@ -28,7 +28,7 @@ function norm(s: string): string {
 // runaway splits. Leaves existing `known` / `candidate` spans untouched.
 export function linkKnownEntities(paragraph: Paragraph, known: KnownEntity[]): Paragraph {
   if (!known.length) return paragraph;
-  // Sort longest first so "Seaview College" wins over "Seaview".
+  // Sort longest first so "Core Loop System" wins over "Core Loop".
   const tokens = known
     .flatMap((e) => [e.name, ...e.aliases].map((t) => ({ slug: e.slug, token: t })))
     .filter((t) => t.token && t.token.length >= 3)

@@ -1,6 +1,8 @@
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tauri::{AppHandle, Manager};
@@ -26,23 +28,29 @@ impl SidecarState {
             });
         }
 
-        let port = pick_port();
+        let port = pick_port().context("could not reserve a free TCP port for the sidecar")?;
         let sidecar_dir = locate_sidecar_dir(handle)?;
         let server_js = sidecar_dir.join("server.js");
         let node_binary = locate_node_binary().context(
-            "`node` binary not found on PATH. Bird Brain's sidecar requires Node.js 20+ installed on the host.",
+            "`node` binary not found. Install Node.js 20+ (e.g. Homebrew), or set BIRDBRAIN_NODE to the full path of your node binary.",
         )?;
 
-        let child = Command::new(&node_binary)
+        let mut child = Command::new(&node_binary);
+        child
             .arg(server_js)
             .current_dir(&sidecar_dir)
-            .env("PORT", port.to_string())
-            .env("HOSTNAME", "127.0.0.1")
-            .env("NODE_ENV", "production")
             .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        apply_sidecar_process_env(&mut child, port);
+        let mut child = child
             .spawn()
             .with_context(|| format!("failed to spawn sidecar via {:?}", node_binary))?;
+
+        if let Err(e) = wait_for_sidecar_listen(port, Duration::from_secs(45), &mut child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(e.context("sidecar did not become ready (check Console for Node errors)"));
+        }
 
         Ok(Self {
             child: Mutex::new(Some(child)),
@@ -68,6 +76,41 @@ impl Drop for SidecarState {
     }
 }
 
+/// Environment for the embedded Next.js `node server.js` process.
+/// GUI-launched macOS apps often inherit a minimal PATH; prepend standard
+/// install locations so optional CLIs remain discoverable. Cursor-related
+/// vars are re-copied from the Tauri parent when set (e.g. launchctl / Terminal).
+fn apply_sidecar_process_env(cmd: &mut Command, port: u16) {
+    cmd.env("PORT", port.to_string())
+        .env("HOSTNAME", "127.0.0.1")
+        .env("NODE_ENV", "production");
+
+    #[cfg(unix)]
+    {
+        let prefix = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+        let merged = std::env::var("PATH").map_or_else(
+            |_| prefix.to_string(),
+            |p| format!("{prefix}:{p}"),
+        );
+        cmd.env("PATH", merged);
+    }
+
+    for key in [
+        "HOME",
+        "USER",
+        "TMPDIR",
+        "CURSOR_AGENT_PATH",
+        "CURSOR_AGENT_MODEL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OLLAMA_HOST",
+    ] {
+        if let Ok(v) = std::env::var(key) {
+            cmd.env(key, v);
+        }
+    }
+}
+
 fn locate_sidecar_dir(handle: &AppHandle) -> Result<PathBuf> {
     let resource_dir = handle
         .path()
@@ -87,8 +130,8 @@ fn locate_node_binary() -> Option<PathBuf> {
         &["node.exe"]
     } else {
         &[
-            "/usr/local/bin/node",
             "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
             "/usr/bin/node",
             "node",
         ]
@@ -102,12 +145,61 @@ fn locate_node_binary() -> Option<PathBuf> {
             return Some(PathBuf::from(c));
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(p) = locate_node_macos_gui_fallback() {
+            return Some(p);
+        }
+    }
     None
 }
 
-fn pick_port() -> u16 {
-    // Try 34521 first; if already bound just return it — Node will fail fast
-    // and we'll surface the error in stdout. Random port selection would
-    // complicate the URL rewrite we expose to the renderer.
-    34521
+/// Finder-launched apps inherit a minimal PATH; resolve `node` via common install dirs.
+#[cfg(target_os = "macos")]
+fn locate_node_macos_gui_fallback() -> Option<PathBuf> {
+    let out = Command::new("/bin/zsh")
+        .arg("-c")
+        .arg(
+            "export PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\"; command -v node 2>/dev/null",
+        )
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() {
+        return None;
+    }
+    let p = PathBuf::from(s);
+    if p.exists() {
+        Some(p)
+    } else {
+        None
+    }
+}
+
+fn pick_port() -> Result<u16> {
+    let listener =
+        TcpListener::bind("127.0.0.1:0").context("failed to bind ephemeral port for sidecar")?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
+}
+
+fn wait_for_sidecar_listen(port: u16, timeout: Duration, child: &mut Child) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if Instant::now() > deadline {
+            anyhow::bail!(
+                "timed out after {:?} waiting for 127.0.0.1:{} (port in use or server crashed)",
+                timeout,
+                port
+            );
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            anyhow::bail!("Node sidecar exited before listening (exit: {status})");
+        }
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(80));
+    }
 }

@@ -7,8 +7,9 @@
 // every noun in the summary is itself a dialogue-tree branch back into the
 // corpus.
 //
-// This is the "self-interpretation of attention" layer from
-// docs/ChatQuote.txt. It is the Datalog panel's top card.
+// This is the "self-interpretation of attention" layer — the Journal
+// panel's top card. It turns what the reader has been clicking into a
+// short, linked paragraph they can walk back into.
 
 import { parseParagraph } from './synthesize';
 import { linkKnownEntities } from '../synthesis/spanify';
@@ -95,7 +96,7 @@ export async function synthesizeSession(
 
   // Reconcile `known` refs against the live entity table — memesis should
   // never link to ghost slugs. Candidate spans are passed through so the
-  // Datalog card can still surface emergent phrases as clickable.
+  // Journal card can still surface emergent phrases as clickable.
   const reconciled: Paragraph = paragraph.map((span) => {
     if (!('ref' in span)) return span;
     if (span.kind === 'known') {

@@ -136,7 +136,7 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
-// Split a filename stem like "HUNTER_EXCAVATION" or "Character_Core_Motivations"
+// Split a filename stem like "PROJECT_OVERVIEW" or "Core_Concepts_v2"
 // into tokens, filtering empties.
 function tokenizeStem(stem: string): string[] {
   return stem
@@ -156,9 +156,9 @@ function inferTypeFromLabel(label: string): string {
 
 // Weighted type selection. We sum each candidate's category weights into
 // type buckets and pick the strongest specific (non-concept) type if it
-// carries ≥15% of the total weight. This lets Oliver (who lives mostly in
-// character folders) be classified as a character even when body mentions
-// span many other folders.
+// carries ≥15% of the total weight. This lets an entity that lives mostly
+// in one kind of folder (e.g. `characters/`, `api/`) be classified by that
+// category even when body mentions span many other folders.
 function chooseType(categoryWeight: Map<string, number>, candidateName: string): string {
   const typeWeight = new Map<string, number>();
   let total = 0;
@@ -268,7 +268,7 @@ function bump(
 // (3+ chars) because design docs often yell names.
 function extractProperNounMentions(body: string): Map<string, number> {
   // Strip contraction suffixes before tokenizing so "Doesn't" → "Does",
-  // "Oliver's" → "Oliver", "They'd" → "They". This prevents dangling
+  // "Alex's" → "Alex", "They'd" → "They". This prevents dangling
   // fragments like "Doesn" from entering the concept table.
   const cleaned = body
     // Full "n't" contractions: doesn't → does, isn't → is, won't → wo (length-filtered)
@@ -279,7 +279,7 @@ function extractProperNounMentions(body: string): Map<string, number> {
   const counts = new Map<string, number>();
   // Single Title-case or ALL-CAPS tokens.
   const singleRe = /\b([A-Z][a-z]{2,}|[A-Z]{3,})\b/g;
-  // Two-word Title-case phrases (e.g., "Opening Incident", "Seaview High").
+  // Two-word Title-case phrases (e.g., "Inventory System", "Core Loop").
   const bigramRe = /\b([A-Z][a-z]{2,}\s+[A-Z][a-z]{2,})\b/g;
 
   const seenPositions = new Set<number>();

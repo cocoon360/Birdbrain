@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS synthesis_queue (
 );
 
 -- ── Memesis / living-notebook layer ────────────────────────────────────────
--- The panorama's Datalog panel reads from these three tables. None of them
+-- The panorama's Journal panel reads from these three tables. None of them
 -- are required for ingest or synthesis to work — they only light up once the
 -- reader starts clicking around.
 
@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS participation_sessions (
 
 -- Every click / resolve / ask that counts as the reader attending to
 -- something. Fire-and-forget inserts from /api/participation/event. The
--- Datalog panel's trail is a SELECT over the last N rows of this table.
+-- Journal panel's trail is a SELECT over the last N rows of this table.
 CREATE TABLE IF NOT EXISTS participation_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL REFERENCES participation_sessions(id) ON DELETE CASCADE,
@@ -193,8 +193,8 @@ CREATE INDEX IF NOT EXISTS idx_events_slug ON participation_events(slug);
 -- emits a candidate span in a dossier paragraph (impression) and again
 -- whenever a reader clicks one (click). Promotion and dismissal are recorded
 -- via status. co_concepts_json is a JSON array of peer slugs the
--- candidate has been seen alongside — that is the co-click material that
--- ChatQuote calls "SQL earning its keep".
+-- candidate has been seen alongside — the co-click material that lets
+-- promoted concepts inherit real neighborhood context from day one.
 CREATE TABLE IF NOT EXISTS candidate_concepts (
   slug TEXT PRIMARY KEY,
   phrase TEXT NOT NULL,

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useDossier } from './DossierContext';
 import { EngineSettingsDrawer } from './EngineSettingsDrawer';
+import { RobotBirdLogo } from './RobotBirdLogo';
 import {
   chrome,
   chromeButtonStyle,
@@ -187,13 +188,7 @@ export function Panorama({
             pointerEvents: 'auto',
           }}
         >
-          <img
-            src="/icons/robot-bird-transparent.svg"
-            width={22}
-            height={22}
-            alt=""
-            style={{ display: 'block', flexShrink: 0 }}
-          />
+          <RobotBirdLogo size={22} />
           <span
             style={{
               fontSize: type.stamp,

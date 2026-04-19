@@ -69,8 +69,11 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    const hint = /EPERM|operation not permitted/i.test(message)
+      ? ' On macOS: System Settings → Privacy & Security → Files and Folders → turn on access for Bird Brain, or for Terminal/Cursor if you start the dev server from there. Then quit and reopen.'
+      : '';
     return NextResponse.json(
-      { error: `Could not read directory ${target}: ${message}` },
+      { error: `Could not read directory ${target}: ${message}${hint}` },
       { status: 400 }
     );
   }

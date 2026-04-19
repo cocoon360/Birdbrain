@@ -2,7 +2,7 @@
 /**
  * Bird Brain ingestion script
  * Usage:
- *   npm run ingest                                      # legacy single-DB mode
+ *   npm run ingest                                      # defaults to ../fixtures/smoke-corpus
  *   DOCS_PATH=/path/to/docs npm run ingest
  *   WORKSPACE_ID=ws_xxx npm run ingest                  # use an existing workspace
  *   WORKSPACE_FOLDER=/path/to/folder npm run ingest     # pick / create workspace by folder
@@ -10,6 +10,7 @@
  *   Omit INGEST_INCLUDE_CODE to use the value stored in the workspace DB.
  */
 
+import fs from 'fs';
 import path from 'path';
 import {
   addWorkspace,
@@ -20,12 +21,23 @@ import {
 import { withWorkspaceId } from '../lib/workspaces/context';
 import { runIngestion } from '../lib/ingest/ingest';
 
+const DEFAULT_SMOKE_CORPUS = path.resolve(process.cwd(), '..', 'fixtures', 'smoke-corpus');
+
 async function main() {
   adoptLegacyWorkspace();
 
   const docsPath = process.env.DOCS_PATH
     ? path.resolve(process.env.DOCS_PATH)
-    : path.resolve(process.cwd(), '..', 'birdsong game copy', 'Game_Development');
+    : DEFAULT_SMOKE_CORPUS;
+
+  if (!process.env.DOCS_PATH && !fs.existsSync(docsPath)) {
+    console.error(
+      'No DOCS_PATH set and fixtures/smoke-corpus is missing.\n' +
+        '  DOCS_PATH=/absolute/path/to/your/markdown npm run ingest\n' +
+        'Or keep the repo fixtures/ folder intact for the default smoke corpus.'
+    );
+    process.exit(1);
+  }
 
   let workspaceId = process.env.WORKSPACE_ID || '';
 

@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
-import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { tryResolveCursorAgentBinary } from './cursor-agent-binary';
 import { getCurrentWorkspace } from '../workspaces/context';
 
 // Low-level wrapper around the Cursor Agent CLI. Invokes it in headless,
@@ -31,23 +31,9 @@ export interface RunOptions {
   workspaceDirectory?: string | null;
 }
 
-// Resolve the absolute path to the cursor-agent binary. We don't assume it's
-// on PATH when spawned from a Next.js server process, because GUI-launched
-// Node usually doesn't inherit the shell PATH that includes ~/.local/bin.
 function resolveBinary(): string {
-  const explicit = process.env.CURSOR_AGENT_PATH;
-  if (explicit && fs.existsSync(explicit)) return explicit;
-  const candidates = [
-    path.join(os.homedir(), '.local', 'bin', 'cursor-agent'),
-    path.join(os.homedir(), '.local', 'bin', 'agent'),
-    '/usr/local/bin/cursor-agent',
-    '/usr/local/bin/agent',
-    '/opt/homebrew/bin/cursor-agent',
-    '/opt/homebrew/bin/agent',
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
+  const found = tryResolveCursorAgentBinary();
+  if (found) return found;
   throw new CursorAgentError(
     'not-installed',
     'cursor-agent binary not found. Install it with: curl https://cursor.com/install -fsS | bash'

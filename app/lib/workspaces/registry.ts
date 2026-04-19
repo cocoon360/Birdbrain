@@ -177,12 +177,13 @@ export function adoptLegacyWorkspace() {
   );
   if (already) return;
 
-  const legacyDocs = process.env.DOCS_PATH
-    ? path.resolve(process.env.DOCS_PATH)
-    : path.resolve(process.cwd(), '..', 'birdsong game copy', 'Game_Development');
-  const folderPath = fs.existsSync(legacyDocs)
-    ? legacyDocs
-    : path.dirname(legacyDb);
+  // Only use DOCS_PATH when adopting legacy DBs; avoid guessing an in-repo
+  // game folder (those often live outside the clone or are gitignored).
+  const legacyDocs = process.env.DOCS_PATH?.trim()
+    ? path.resolve(process.env.DOCS_PATH.trim())
+    : '';
+  const folderPath =
+    legacyDocs && fs.existsSync(legacyDocs) ? legacyDocs : path.dirname(legacyDb);
 
   const record: WorkspaceRecord = {
     id: newWorkspaceId(),

@@ -1,16 +1,21 @@
-# Icons
+# Bundle icons
 
-These files are the **default Tauri app-template icons** (from `tauri-v2.0.0`
-`crates/tauri-cli/templates/app/src-tauri/icons`) so `cargo tauri dev` and
-`cargo tauri build` can run without extra setup. Tauri’s build reads them at
-compile time.
+These PNG / ICNS / ICO files are generated from the **transparent** robot-bird mark (no tile background), same paths as `public/icons/robot-bird-transparent.svg` and `app/app/icon.svg`.
 
-Replace them before shipping Bird Brain:
+**Regenerate**
+
+From the **repository root** (`birdbrain/`):
 
 ```bash
-cd src-tauri
-cargo tauri icon path/to/your-1024.png
+cd src-tauri && cargo tauri icon ../app/public/icons/robot-bird-transparent.svg
 ```
 
-That regenerates `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, and
-`icon.ico` in this folder.
+From the **`app/`** folder:
+
+```bash
+cd ../src-tauri && cargo tauri icon ../public/icons/robot-bird-transparent.svg
+```
+
+Then remove extra outputs if you only ship desktop bundles (the CLI also writes Windows Store tiles, iOS, and Android assets under `icons/`). `tauri.conf.json` only references:
+
+- `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`

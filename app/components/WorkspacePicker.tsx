@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isTauri, openWorkspaceWindow, pickFolderNative } from '@/lib/desktop/tauri-bridge';
 import { FolderBrowserDialog } from './FolderBrowserDialog';
+import { RobotBirdLogo } from './RobotBirdLogo';
 
 interface WorkspaceRecord {
   id: string;
@@ -26,7 +27,6 @@ type IngestPhase =
   | { kind: 'idle' }
   | { kind: 'registering'; folder: string }
   | { kind: 'ingesting'; folder: string }
-  | { kind: 'done'; folder: string; stats: IngestStats; workspaceId: string }
   | { kind: 'empty'; folder: string; workspaceId: string }
   | { kind: 'error'; folder: string; message: string };
 
@@ -199,7 +199,10 @@ export function WorkspacePicker({
           setPhase({ kind: 'empty', folder: ws.folder_path, workspaceId: ws.id });
           return;
         }
-        setPhase({ kind: 'done', folder: ws.folder_path, stats, workspaceId: ws.id });
+        // Go straight to the workspace. A delayed auto-enter in the modal was
+        // unreliable in the desktop shell (effect cleanups cancelled navigation).
+        setPhase({ kind: 'idle' });
+        router.push(`/w/${encodeURIComponent(ws.id)}`);
         return;
       }
       router.push(`/w/${encodeURIComponent(ws.id)}`);
@@ -208,10 +211,13 @@ export function WorkspacePicker({
     }
   }
 
-  function enterWorkspace(workspaceId: string) {
-    setPhase({ kind: 'idle' });
-    router.push(`/w/${encodeURIComponent(workspaceId)}`);
-  }
+  const enterWorkspace = useCallback(
+    (workspaceId: string) => {
+      setPhase({ kind: 'idle' });
+      router.push(`/w/${encodeURIComponent(workspaceId)}`);
+    },
+    [router]
+  );
 
   async function removeWorkspace(ws: WorkspaceRecord) {
     if (!confirm(`Remove ${ws.name} from the picker? (The folder and DB file are not deleted.)`)) {
@@ -250,13 +256,7 @@ export function WorkspacePicker({
             marginBottom: 14,
           }}
         >
-          <img
-            src="/icons/robot-bird-transparent.svg"
-            width={36}
-            height={36}
-            alt=""
-            style={{ display: 'block', flexShrink: 0 }}
-          />
+          <RobotBirdLogo size={36} />
           <div
             style={{
               fontSize: '0.7rem',
@@ -376,30 +376,57 @@ export function WorkspacePicker({
             >
               folder to ingest
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
               <input
                 type="text"
                 placeholder="/absolute/path/to/folder"
                 value={folderInput}
                 onChange={(e) => setFolderInput(e.target.value)}
-                style={{ ...inputStyle, flex: 1 }}
+                style={{ ...inputStyle, flex: 1, minWidth: 200 }}
               />
-              <button
-                onClick={async () => {
-                  if (hasNative) {
-                    const picked = await pickFolderNative();
-                    if (picked) {
-                      setFolderInput(picked.path);
-                      if (!nameInput) setNameInput(picked.name);
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMessage('');
+                    try {
+                      if (hasNative) {
+                        const picked = await pickFolderNative();
+                        if (picked) {
+                          setFolderInput(picked.path);
+                          if (!nameInput) setNameInput(picked.name);
+                        } else {
+                          setMessage(
+                            'No folder was chosen. If the dialog did not appear, use “browse here”.'
+                          );
+                        }
+                      } else {
+                        setBrowserOpen(true);
+                      }
+                    } catch (err) {
+                      setMessage(
+                        err instanceof Error ? err.message : 'Native folder picker failed.'
+                      );
                     }
-                  } else {
-                    setBrowserOpen(true);
-                  }
-                }}
-                style={secondaryButtonStyle(false)}
-              >
-                browse
-              </button>
+                  }}
+                  style={secondaryButtonStyle(false)}
+                >
+                  {hasNative ? 'system dialog' : 'browse'}
+                </button>
+                {hasNative && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMessage('');
+                      setBrowserOpen(true);
+                    }}
+                    style={secondaryButtonStyle(false)}
+                    title="Pick a folder using the in-app file tree (same as the web build)."
+                  >
+                    browse here
+                  </button>
+                )}
+              </div>
             </div>
             <input
               type="text"
@@ -420,7 +447,9 @@ export function WorkspacePicker({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', flex: 1 }}>
                 <div style={{ fontSize: '0.66rem', color: '#555', lineHeight: 1.45 }}>
-                  {hasNative ? 'browse for a folder, or paste a path.' : 'browse your home folder, or paste a path.'}
+                  {hasNative
+                    ? 'System dialog or in-app tree, or paste a path.'
+                    : 'Browse your home folder, or paste a path.'}
                   {' · '}
                   <span title="Readable: .md .txt .rst .org .adoc .json .yaml .csv .log .toml .ini .html .htm .xml .svg. Binaries, PDFs, images, videos, and dot-folders always skipped. Nothing in your folder is copied or modified.">
                     md + txt + html + svg only
@@ -658,31 +687,17 @@ function IngestProgressModal({
   onClose: () => void;
   onEnter: (workspaceId: string) => void;
 }) {
-  const autoEnteredRef = useRef(false);
-  useEffect(() => {
-    if (phase.kind !== 'done') {
-      autoEnteredRef.current = false;
-      return;
-    }
-    if (autoEnteredRef.current) return;
-    autoEnteredRef.current = true;
-    const id = phase.workspaceId;
-    const timer = setTimeout(() => onEnter(id), 900);
-    return () => clearTimeout(timer);
-  }, [phase, onEnter]);
   const titleCopy =
     phase.kind === 'registering'
       ? 'Registering workspace'
       : phase.kind === 'ingesting'
         ? 'Ingesting documents'
-        : phase.kind === 'done'
-          ? 'Ready to open'
-          : phase.kind === 'empty'
-            ? 'No readable files found'
-            : 'Ingest failed';
+        : phase.kind === 'empty'
+          ? 'No readable files found'
+          : 'Ingest failed';
 
   const titleColor =
-    phase.kind === 'done' ? '#00d68f' : phase.kind === 'error' ? '#e74c9b' : phase.kind === 'empty' ? '#e7b24c' : '#00b4d8';
+    phase.kind === 'error' ? '#e74c9b' : phase.kind === 'empty' ? '#e7b24c' : '#00b4d8';
 
   const folder =
     'folder' in phase ? phase.folder : '';
@@ -728,8 +743,6 @@ function IngestProgressModal({
           {phase.kind === 'registering' && 'Creating the workspace database…'}
           {phase.kind === 'ingesting' &&
             'Walking the folder for markdown, text, HTML, SVG, and optionally source code.'}
-          {phase.kind === 'done' &&
-            `Added ${phase.stats.added}, updated ${phase.stats.updated}, removed ${phase.stats.removed}.`}
           {phase.kind === 'empty' && 'This folder has no readable text files under it.'}
           {phase.kind === 'error' && phase.message}
         </div>
@@ -748,10 +761,6 @@ function IngestProgressModal({
         )}
 
         {busy && <IngestSpinnerRow />}
-
-        {phase.kind === 'done' && (
-          <IngestStatsBlock stats={phase.stats} />
-        )}
 
         {phase.kind === 'empty' && (
           <div
@@ -792,22 +801,6 @@ function IngestProgressModal({
             flexWrap: 'wrap',
           }}
         >
-          {phase.kind === 'done' && (
-            <div
-              style={{
-                fontSize: '0.66rem',
-                color: '#00d68f',
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-                fontWeight: 700,
-                padding: '10px 14px',
-                border: '1px solid #1b3b2f',
-                background: '#071613',
-              }}
-            >
-              entering workspace…
-            </div>
-          )}
           {phase.kind === 'empty' && (
             <button
               onClick={() => onEnter(phase.workspaceId)}
@@ -841,7 +834,7 @@ function IngestProgressModal({
                 fontWeight: 700,
               }}
             >
-              {phase.kind === 'done' || phase.kind === 'empty' ? 'stay here' : 'close'}
+              {phase.kind === 'empty' ? 'stay here' : 'close'}
             </button>
           )}
         </div>
@@ -877,83 +870,6 @@ function IngestSpinnerRow() {
         Parsing markdown, chunking by heading, writing to SQLite.
       </div>
       <style>{`@keyframes bb-spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
-
-function IngestStatsBlock({ stats }: { stats: IngestStats }) {
-  const rows: Array<{ label: string; value: number; color: string }> = [
-    { label: 'files found', value: stats.total, color: '#00b4d8' },
-    { label: 'added', value: stats.added, color: '#00d68f' },
-    { label: 'updated', value: stats.updated, color: '#e7b24c' },
-    { label: 'removed', value: stats.removed, color: '#e74c9b' },
-  ];
-  const k = stats.by_kind;
-  const kindCells: Array<{ label: string; value: number }> = k
-    ? [
-        { label: 'markdown', value: k.markdown },
-        { label: 'text', value: k.text },
-        { label: 'html', value: k.html ?? 0 },
-        { label: 'svg', value: k.svg },
-        { label: 'code', value: k.code ?? 0 },
-      ].filter((c) => c.value > 0)
-    : [];
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 10,
-          marginBottom: kindCells.length ? 10 : 0,
-        }}
-      >
-        {rows.map((r) => (
-          <div
-            key={r.label}
-            style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '10px 12px' }}
-          >
-            <div
-              style={{
-                fontSize: '0.56rem',
-                color: '#666',
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                marginBottom: 6,
-              }}
-            >
-              {r.label}
-            </div>
-            <div style={{ fontSize: '1.2rem', color: r.color, fontWeight: 300 }}>{r.value}</div>
-          </div>
-        ))}
-      </div>
-      {kindCells.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            flexWrap: 'wrap',
-            fontSize: '0.64rem',
-            color: '#888',
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-          }}
-        >
-          {kindCells.map((c) => (
-            <span
-              key={c.label}
-              style={{
-                background: '#0f0f0f',
-                border: '1px solid #1c1c1c',
-                padding: '4px 8px',
-              }}
-            >
-              {c.label}&nbsp;<span style={{ color: '#ddd' }}>{c.value}</span>
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 //
 // Every click that counts as "attention" fires a fire-and-forget POST to
 // /api/participation/event. The API writes to participation_events (see
-// lib/db/participation.ts). Failures are swallowed: the Datalog panel is
+// lib/db/participation.ts). Failures are swallowed: the Journal panel is
 // the only consumer, and stale trail is strictly better than a broken UX.
 //
 // Sessions: one session id per browser, stored in localStorage, rotated

@@ -13,7 +13,7 @@
  *   WORKSPACE_FOLDER=/path/to/folder \
  *   npx tsx scripts/eval-dossiers.ts            # top-12 concepts by mention
  *
- *   EVAL_SLUGS=oliver,hunter,seaview \
+ *   EVAL_SLUGS=slug-one,slug-two,slug-three \
  *   npx tsx scripts/eval-dossiers.ts            # explicit slug list
  *
  *   EVAL_LIMIT=6 EVAL_PROFILE=queued \

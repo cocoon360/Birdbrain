@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureOntologyReady, rebuildOntology } from '@/lib/ontology/startup';
 import { getStartupStatus } from '@/lib/db/queries';
+import { rebuildErrorBody } from '@/lib/engine/rebuild-errors';
 import { withWorkspaceRoute } from '@/lib/workspaces/route';
 
 export const maxDuration = 180;
@@ -22,14 +23,8 @@ export async function POST(req: NextRequest) {
       const status = await ensureOntologyReady(mode);
       return NextResponse.json({ ok: true, rebuilt: status.ready, status });
     } catch (error) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: error instanceof Error ? error.message : 'Ontology rebuild failed',
-          status: getStartupStatus(),
-        },
-        { status: 500 }
-      );
+      const bodyJson = { ok: false as const, status: getStartupStatus(), ...rebuildErrorBody(error) };
+      return NextResponse.json(bodyJson, { status: 500 });
     }
   });
 }

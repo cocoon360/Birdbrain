@@ -9,14 +9,14 @@ import { DocDrawer } from '@/components/DocDrawer';
 import { HubPanel } from '@/components/panels/HubPanel';
 import { WorkbenchPanel } from '@/components/panels/WorkbenchPanel';
 import { TimelinePanel } from '@/components/panels/TimelinePanel';
-import { DatalogPanel } from '@/components/panels/DatalogPanel';
+import { JournalPanel } from '@/components/panels/JournalPanel';
 import { StartupShell } from '@/components/StartupShell';
 import { WorkspaceProvider, type WorkspaceShape } from '@/components/WorkspaceProvider';
 
 const PANELS: PanoramaPanel[] = [
   { id: 'hub', label: 'hub', content: <HubPanel /> },
   { id: 'workbench', label: 'workbench', content: <WorkbenchPanel /> },
-  { id: 'datalog', label: 'datalog', content: <DatalogPanel /> },
+  { id: 'journal', label: 'journal', content: <JournalPanel /> },
   { id: 'timeline', label: 'timeline', content: <TimelinePanel /> },
 ];
 

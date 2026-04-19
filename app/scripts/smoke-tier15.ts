@@ -1,5 +1,6 @@
 // One-off smoke test for tier-1.5 ingest.
-//   npx tsx app/scripts/smoke-tier15.ts /tmp/bb-fixture/docs
+//   npm test   (uses ../fixtures/smoke-corpus from app/)
+//   npx tsx app/scripts/smoke-tier15.ts /path/to/folder
 //
 // Walks the given folder with the new allowlist, parses every file, and
 // prints a compact summary so we can eyeball that text + SVG paths produce

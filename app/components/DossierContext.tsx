@@ -418,7 +418,7 @@ export function DossierProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(branchKey(workspaceId));
       // A session reset is itself an event worth recording BEFORE the
-      // session id rotates, so the Datalog retains the shape of the prior
+      // session id rotates, so the Journal retains the shape of the prior
       // reading even after the user nukes their trail in the UI.
       logParticipation(workspaceId, { kind: 'reset' });
       // Rotate the server session id by clearing the participation cell so

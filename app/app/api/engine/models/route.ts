@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import { tryResolveCursorAgentBinary } from '@/lib/ai/cursor-agent-binary';
 import { withWorkspaceRoute } from '@/lib/workspaces/route';
 
 // Returns the list of models the local cursor-agent CLI actually accepts,
@@ -56,23 +54,8 @@ const CURATED_GROUPS: ModelGroup[] = [
   },
 ];
 
-function resolveBinary(): string | null {
-  const explicit = process.env.CURSOR_AGENT_PATH;
-  if (explicit && fs.existsSync(explicit)) return explicit;
-  const candidates = [
-    path.join(os.homedir(), '.local', 'bin', 'cursor-agent'),
-    path.join(os.homedir(), '.local', 'bin', 'agent'),
-    '/usr/local/bin/cursor-agent',
-    '/usr/local/bin/agent',
-    '/opt/homebrew/bin/cursor-agent',
-    '/opt/homebrew/bin/agent',
-  ];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  return null;
-}
-
 function runModels(): Promise<string> {
-  const bin = resolveBinary();
+  const bin = tryResolveCursorAgentBinary();
   if (!bin) return Promise.reject(new Error('cursor-agent binary not found'));
   return new Promise((resolve, reject) => {
     const child = spawn(bin, ['models'], { stdio: ['ignore', 'pipe', 'pipe'] });

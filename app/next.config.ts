@@ -5,6 +5,10 @@ import type { NextConfig } from "next";
 // that can be run with `node server.js` without a node_modules lookup at
 // runtime. The scripts/pack-sidecar.mjs helper copies the native
 // better-sqlite3 binding into that bundle so it works once packaged.
+//
+// Production builds use webpack (`npm run build` → `next build --webpack`) so
+// Turbopack’s NFT trace does not pull the whole tree via server routes that
+// probe the filesystem for the cursor-agent binary.
 const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["better-sqlite3"],

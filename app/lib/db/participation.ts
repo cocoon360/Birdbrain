@@ -2,7 +2,7 @@
 //
 // Clients fire-and-forget POST to /api/participation/event on every click.
 // That endpoint calls ensureSession() + insertEvent() here. All reads for
-// the Datalog panel (trail, emerging candidates, drift) also land here.
+// the Journal panel (trail, emerging candidates, drift) also land here.
 //
 // The tables all live in the same per-workspace SQLite DB so a reader's
 // session is scoped to the workspace it happened in, never leaking across.
