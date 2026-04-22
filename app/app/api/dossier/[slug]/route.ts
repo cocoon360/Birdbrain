@@ -10,7 +10,11 @@ import {
   deleteSynthesisCacheForSlug,
   deletePrecontextForSlug,
 } from '@/lib/db/queries';
-import { synthesizeForSlug } from '@/lib/ai/synthesize';
+import {
+  dossierCacheProfile,
+  synthesizeForSlug,
+  type DossierSynthesisVariant,
+} from '@/lib/ai/synthesize';
 import { CursorAgentError } from '@/lib/ai/cursor-agent';
 import { EngineError } from '@/lib/engine';
 import { withWorkspaceRoute } from '@/lib/workspaces/route';
@@ -26,6 +30,11 @@ export async function GET(
     const { slug } = await context.params;
     const search = req.nextUrl.searchParams;
     const profile = search.get('mode') === 'queued' ? 'queued' : 'live';
+    const forkSpanify = search.get('fork') === 'spanify' && profile === 'live';
+    const synthesisVariant: DossierSynthesisVariant = forkSpanify
+      ? 'spanify_precontext'
+      : 'default';
+    const cacheProfile = dossierCacheProfile(profile, synthesisVariant);
     const fromSlug = search.get('from');
     const rootSlug = search.get('root');
     const startup = getStartupStatus();
@@ -49,13 +58,14 @@ export async function GET(
     const evidence = getEntityMentions(slug, 6);
     const precontext = getPrecontextForSlug(slug);
 
-    const cached = getSynthesisForSlug(slug, profile);
+    const cached = getSynthesisForSlug(slug, cacheProfile);
     if (cached) {
       return NextResponse.json({
         concept,
         precontext,
         pending: false,
         profile,
+        synthesis_variant: synthesisVariant,
         paragraph: cached.paragraph,
         generated_at: cached.generated_at,
         generator: cached.generator,
@@ -78,6 +88,7 @@ export async function GET(
         pending: true,
         pending_stage: precontext ? 'dossier' : 'precontext',
         profile,
+        synthesis_variant: synthesisVariant,
         paragraph: null,
         error: null,
         evidence,
@@ -86,12 +97,18 @@ export async function GET(
     }
 
     try {
-      const fresh = await synthesizeForSlug(slug, { profile, fromSlug, rootSlug });
+      const fresh = await synthesizeForSlug(slug, {
+        profile,
+        fromSlug,
+        rootSlug,
+        variant: synthesisVariant,
+      });
       return NextResponse.json({
         concept,
         precontext: fresh.precontext,
         pending: false,
         profile,
+        synthesis_variant: synthesisVariant,
         paragraph: fresh.paragraph,
         generated_at: Math.floor(Date.now() / 1000),
         generator: fresh.generator,
@@ -107,6 +124,7 @@ export async function GET(
         pending: true,
         pending_stage: precontext ? 'dossier' : 'precontext',
         profile,
+        synthesis_variant: synthesisVariant,
         paragraph: null,
         error: { code, message },
         evidence,
@@ -122,6 +140,8 @@ interface RegenerateBody {
   mode?: string;
   from?: string | null;
   root?: string | null;
+  /** When `spanify` with live profile: only re-segment precontext into spans; keep precontext cache. */
+  fork?: 'spanify' | 'default';
 }
 
 export async function POST(
@@ -162,12 +182,20 @@ export async function POST(
       body.profile === 'queued' || body.mode === 'queued' ? ('queued' as const) : ('live' as const);
     const fromSlug = body.from ?? null;
     const rootSlug = body.root ?? null;
+    const forkSpanify = body.fork === 'spanify' && profile === 'live';
+    const synthesisVariant: DossierSynthesisVariant = forkSpanify
+      ? 'spanify_precontext'
+      : 'default';
 
     const related = getRelatedEntities(slug, 10);
     const evidence = getEntityMentions(slug, 6);
 
-    deletePrecontextForSlug(slug);
-    deleteSynthesisCacheForSlug(slug, profile);
+    if (forkSpanify) {
+      deleteSynthesisCacheForSlug(slug, 'live_spanify');
+    } else {
+      deletePrecontextForSlug(slug);
+      deleteSynthesisCacheForSlug(slug);
+    }
 
     if (profile === 'queued') {
       enqueueSynthesis({
@@ -190,12 +218,18 @@ export async function POST(
     }
 
     try {
-      const fresh = await synthesizeForSlug(slug, { profile: 'live', fromSlug, rootSlug });
+      const fresh = await synthesizeForSlug(slug, {
+        profile: 'live',
+        fromSlug,
+        rootSlug,
+        variant: synthesisVariant,
+      });
       return NextResponse.json({
         concept,
         precontext: fresh.precontext,
         pending: false,
         profile: 'live',
+        synthesis_variant: synthesisVariant,
         paragraph: fresh.paragraph,
         generated_at: Math.floor(Date.now() / 1000),
         generator: fresh.generator,
@@ -207,10 +241,11 @@ export async function POST(
       const { code, message } = describeError(err);
       return NextResponse.json({
         concept,
-        precontext: null,
+        precontext: forkSpanify ? getPrecontextForSlug(slug) : null,
         pending: true,
-        pending_stage: 'precontext',
+        pending_stage: forkSpanify ? 'dossier' : 'precontext',
         profile: 'live',
+        synthesis_variant: synthesisVariant,
         paragraph: null,
         error: { code, message },
         evidence,

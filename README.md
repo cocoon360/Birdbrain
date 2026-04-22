@@ -102,7 +102,8 @@ Honest list of things I haven't nailed yet:
   but is still more log than journal; a copy pass wouldn't hurt.
 - **Copied-to-clipboard feedback.** When you export a generated hypertext page to Markdown, there's no visible signal yet that the text has been copied to your clipboard - some kind of confirmation/tell is still needed.
 - **Workbench tab.** Still evaluating whether the Workbench tab meaningfully improves the user experience or just adds complexity. It may be streamlined or removed entirely if it proves unneeded.
-
+- **Conflict detection.** Bird Brain does not yet flag conflicts across sources. In the future, it should automatically detect when your files contain contradictory information about the same concept, highlight those disagreements, and surface them so you can track or resolve inconsistencies in your project’s knowledge base.
+- **Clear loading & processing stages.** The app's feedback for ingest, indexing, and page generation is still too minimal. Making the stages and background processing more visible is an area for improvement, so users always know what has finished processing and what is still in progress, instead of being left guessing.
 
 ***
 

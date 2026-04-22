@@ -19,6 +19,20 @@ import type { Paragraph } from '../synthesis/types';
 import { getEngineForWorkspace, EngineError } from '../engine';
 import { synthesizePrecontextForSlug } from './precontext';
 
+/** Default dossier pass rewrites prose + emits spans. Spanify fork only segments `precontext_text`. */
+export type DossierSynthesisVariant = 'default' | 'spanify_precontext';
+
+/** SQLite `concept_synthesis_cache.profile` string for a (mode, variant) pair. */
+export function dossierCacheProfile(
+  profile: 'live' | 'queued',
+  variant: DossierSynthesisVariant
+): string {
+  if (variant === 'spanify_precontext') {
+    return profile === 'queued' ? 'queued_spanify' : 'live_spanify';
+  }
+  return profile;
+}
+
 // Live, on-demand concept synthesis. Called by the dossier API when a concept
 // has no cached paragraph. The flow is:
 //   1. Load the concept + best evidence + the known-concept index from SQLite.
@@ -73,11 +87,22 @@ export async function synthesizeForSlug(
     profile?: 'live' | 'queued';
     fromSlug?: string | null;
     rootSlug?: string | null;
+    variant?: DossierSynthesisVariant;
   } = {}
 ): Promise<SynthesisResult> {
   const entity = getEntityBySlug(slug);
   if (!entity) throw new Error(`Concept "${slug}" not found`);
   const profile = options.profile ?? 'live';
+  const variant: DossierSynthesisVariant =
+    options.variant === 'spanify_precontext' && profile === 'live' ? 'spanify_precontext' : 'default';
+
+  if (variant === 'spanify_precontext') {
+    return synthesizeSpanifyOnlyFromPrecontext(slug, {
+      fromSlug: options.fromSlug ?? null,
+      rootSlug: options.rootSlug ?? null,
+    });
+  }
+
   const evidenceLimit = profile === 'queued' ? QUEUED_EVIDENCE_PER_ENTITY : LIVE_EVIDENCE_PER_ENTITY;
   const knownLimit = profile === 'queued' ? QUEUED_KNOWN_CONCEPTS : LIVE_KNOWN_CONCEPTS;
   const maxChars = profile === 'queued' ? MAX_EVIDENCE_CHARS_QUEUED : MAX_EVIDENCE_CHARS;
@@ -146,6 +171,7 @@ export async function synthesizeForSlug(
   logSynthesisTelemetry({
     slug,
     profile,
+    variant: 'default',
     provider: engine.provider,
     model: model ?? null,
     precontext,
@@ -165,6 +191,144 @@ export async function synthesizeForSlug(
   };
 }
 
+async function synthesizeSpanifyOnlyFromPrecontext(
+  slug: string,
+  options: { fromSlug: string | null; rootSlug: string | null }
+): Promise<SynthesisResult> {
+  const entity = getEntityBySlug(slug);
+  if (!entity) throw new Error(`Concept "${slug}" not found`);
+  const engineEarly = getEngineForWorkspace();
+  const aliasRows = getAllEntitiesWithAliases();
+  const meta = getProjectMeta();
+  const knownLimit = LIVE_KNOWN_CONCEPTS;
+  const precontext = (getPrecontextForSlug(slug) ??
+    (await synthesizePrecontextForSlug(slug))) as ConceptPrecontextRow;
+
+  const canonical = (precontext.precontext_text ?? '').trim();
+  if (!canonical) {
+    throw new EngineError(
+      engineEarly.provider,
+      'empty-output',
+      'No precontext_text to segment; run precontext first or ingest the corpus.',
+      ''
+    );
+  }
+
+  const prompt = buildSpanifyOnlyPrompt({
+    projectName: meta.project_name,
+    entity,
+    canonicalParagraph: canonical,
+    knownConcepts: pickKnownConcepts(aliasRows, slug, knownLimit),
+    fromSlug: options.fromSlug,
+    rootSlug: options.rootSlug,
+    conceptSlug: slug,
+  });
+
+  const engine = engineEarly;
+  const model = engine.defaultModel;
+  const generateStart = Date.now();
+  const raw = await engine.generate({ prompt });
+  const generateMs = Date.now() - generateStart;
+  let paragraph = parseParagraph(raw);
+  if (!paragraph || !spansMatchCanonical(paragraph, canonical)) {
+    paragraph = [{ text: canonical }];
+  }
+
+  const reconciled = reconcileSpans(paragraph, slug);
+  const linked = linkKnownEntities(
+    reconciled,
+    aliasRows.map((r) => ({ slug: r.slug, name: r.name, aliases: r.aliases }))
+  );
+
+  upsertSynthesis({
+    entityId: entity.id,
+    profile: 'live_spanify',
+    paragraph: linked,
+    generator: engine.provider,
+    model: model ?? null,
+  });
+  markQueueDone(entity.id, 'live');
+
+  logSynthesisTelemetry({
+    slug,
+    profile: 'live',
+    variant: 'spanify_precontext',
+    provider: engine.provider,
+    model: model ?? null,
+    precontext,
+    evidence: [],
+    promptChars: prompt.length,
+    generateMs,
+    paragraph: linked,
+  });
+
+  return {
+    paragraph: linked,
+    precontext,
+    generator: engine.provider,
+    model: model ?? null,
+    profile: 'live_spanify',
+    promptChars: prompt.length,
+  };
+}
+
+function paragraphPlain(p: Paragraph): string {
+  return p.map((s) => s.text).join('');
+}
+
+function spansMatchCanonical(paragraph: Paragraph, canonical: string): boolean {
+  return paragraphPlain(paragraph) === canonical;
+}
+
+function buildSpanifyOnlyPrompt(input: {
+  projectName: string;
+  entity: EntityRow;
+  canonicalParagraph: string;
+  knownConcepts: Array<{ slug: string; name: string; type: string }>;
+  fromSlug: string | null;
+  rootSlug: string | null;
+  conceptSlug: string;
+}): string {
+  const { projectName, entity, canonicalParagraph, knownConcepts, fromSlug, conceptSlug } = input;
+  const canonicalJson = JSON.stringify(canonicalParagraph);
+  const knownBlock = knownConcepts.map((k) => `- ${k.slug} · ${k.name} (${k.type})`).join('\n');
+  const hasBridge = !!(fromSlug && fromSlug !== conceptSlug);
+  const bridgeNote = hasBridge
+    ? `The reader navigated from concept "${fromSlug}". If you emit a known span for that name when it appears in the text, use ref="${fromSlug}".`
+    : '';
+
+  return `You segment fixed paragraph text into hypertext spans for project "${projectName}".
+
+You must NOT change, add, or remove any characters in the paragraph. Only split it into spans.
+
+CONCEPT: ${entity.name}
+
+CANONICAL_PARAGRAPH_JSON (exact string to segment — concatenate span texts in order to recover this exact JSON string when parsed):
+${canonicalJson}
+
+KNOWN CONCEPTS — when text matches a phrase for one of these, use kind "known" with the exact ref slug:
+${knownBlock}
+
+${bridgeNote}
+
+OUTPUT SHAPE
+Return ONLY a JSON array of spans. No prose before or after. No markdown fence. The first character must be "[" and the last "]".
+
+Each span is one of:
+  { "text": "<plain text>" }
+  { "text": "<surface phrase>", "ref": "<slug-from-known-list>", "kind": "known" }
+  { "text": "<2–4 word phrase>", "ref": "<lowercase-hyphen-slug>", "kind": "candidate" }
+
+RULES
+- Concatenating every span.text in sequence MUST equal the string obtained by JSON-parsing CANONICAL_PARAGRAPH_JSON (character-for-character).
+- Do not paraphrase, summarize, fix typos, or adjust punctuation.
+- Emit 1–3 "candidate" spans for strong in-world phrases not covered by KNOWN CONCEPTS.
+- Plain spans are glue words, spaces, and punctuation between links.
+- Describe the subject matter; never mention the app, tool, snippets, JSON, or segmentation.
+
+Respond with the JSON array only.`;
+}
+
 /**
  * Single-line retrieval telemetry per synthesis. Kept small on purpose so it
  * is useful in terminal tails AND parseable by the eval harness in
@@ -173,6 +337,7 @@ export async function synthesizeForSlug(
 function logSynthesisTelemetry(args: {
   slug: string;
   profile: 'live' | 'queued';
+  variant?: DossierSynthesisVariant;
   provider: string;
   model: string | null;
   precontext: ConceptPrecontextRow;
@@ -196,10 +361,13 @@ function logSynthesisTelemetry(args: {
       words += span.text.trim().split(/\s+/).filter(Boolean).length;
     }
   }
+  const variantSuffix =
+    args.variant && args.variant !== 'default' ? ` variant=${args.variant}` : '';
   // eslint-disable-next-line no-console
   console.log(
     `[synthesize] slug=${args.slug} profile=${args.profile} provider=${args.provider}` +
       `${args.model ? ` model=${args.model}` : ''}` +
+      variantSuffix +
       ` evidence=direct:${bySource.direct},neighbor:${bySource.neighbor},` +
       `fts:${bySource.fts_recall},peer:${bySource.from_peer}` +
       ` precontext_chars=${args.precontext.precontext_text.length}` +

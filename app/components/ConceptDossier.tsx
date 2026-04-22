@@ -71,6 +71,8 @@ interface DossierData {
   pending: boolean;
   pending_stage?: 'precontext' | 'dossier';
   profile?: 'live' | 'queued';
+  /** API: default dossier vs spanify-from-precontext fork */
+  synthesis_variant?: 'default' | 'spanify_precontext';
   paragraph: Span[] | null;
   evidence: EvidenceRow[];
   related: RelatedConcept[];
@@ -98,7 +100,18 @@ export function ConceptDossier() {
   const [queuingPhrase, setQueuingPhrase] = useState<string | null>(null);
   const [queueActivity, setQueueActivity] = useState<'idle' | 'status' | 'generating'>('idle');
   const [regenerating, setRegenerating] = useState(false);
+  const [dossierFork, setDossierFork] = useState<'default' | 'spanify'>(() => {
+    if (typeof window === 'undefined') return 'default';
+    return window.localStorage.getItem('birdbrain.dossierFork') === 'spanify' ? 'spanify' : 'default';
+  });
 
+  const effectiveFork = synthesisMode === 'live' ? dossierFork : 'default';
+
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('birdbrain.dossierFork', dossierFork);
+  }, [dossierFork]);
   useEffect(() => {
     if (!conceptSlug) {
       setData(null);
@@ -108,7 +121,7 @@ export function ConceptDossier() {
     setLoading(true);
     setData(null);
     setShowEvidence(false);
-    fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext))
+    fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext, effectiveFork))
       .then(async (r) => {
         const text = await r.text();
         try {
@@ -128,7 +141,7 @@ export function ConceptDossier() {
         markBranchStatus(conceptSlug, 'idle');
       })
       .finally(() => setLoading(false));
-  }, [conceptSlug, synthesisMode, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus]);
+  }, [conceptSlug, synthesisMode, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus, effectiveFork]);
 
   useEffect(() => {
     if (!conceptSlug || synthesisMode !== 'queued' || !data?.pending) return;
@@ -144,7 +157,7 @@ export function ConceptDossier() {
         } else {
           setQueueActivity('idle');
         }
-        const res = await fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext));
+        const res = await fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext, effectiveFork));
         const next = (await res.json()) as DossierData;
         setData(next);
         markBranchStatus(conceptSlug, next.pending || next.blocked ? 'pending' : 'ready');
@@ -156,7 +169,16 @@ export function ConceptDossier() {
       setQueueActivity('idle');
       window.clearInterval(timer);
     };
-  }, [conceptSlug, synthesisMode, data?.pending, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus]);
+  }, [
+    conceptSlug,
+    synthesisMode,
+    data?.pending,
+    branchContext.branchId,
+    branchContext.fromSlug,
+    branchContext.rootSlug,
+    markBranchStatus,
+    effectiveFork,
+  ]);
 
   // Log every candidate span shown in the current paragraph as an impression.
   // This is what lets candidate_concepts accumulate distinct-session reach
@@ -206,6 +228,7 @@ export function ConceptDossier() {
           from: branchContext.fromSlug ?? undefined,
           root: branchContext.rootSlug ?? undefined,
           branch: branchContext.branchId ?? undefined,
+          fork: effectiveFork === 'spanify' ? 'spanify' : undefined,
         }),
       });
       const d = (await res.json()) as DossierData;
@@ -325,6 +348,79 @@ export function ConceptDossier() {
             <Stat label="TOTAL DOCS" value={concept.document_count} color="#888" />
           </div>
         )}
+        <div
+          style={{
+            marginTop: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span
+            style={{
+              fontSize: '0.55rem',
+              letterSpacing: '0.12em',
+              color: '#888',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+            }}
+          >
+            Dossier engine (fork)
+          </span>
+          <div
+            style={{
+              display: 'inline-flex',
+              border: `1px solid ${synthesisMode === 'live' ? '#3a3a3a' : '#252525'}`,
+              borderRadius: 4,
+              overflow: 'hidden',
+              opacity: synthesisMode === 'live' ? 1 : 0.65,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => synthesisMode === 'live' && setDossierFork('default')}
+              title="Full dossier synthesis (evidence + span pass)."
+              style={{
+                background: dossierFork === 'default' ? '#1c1c1c' : 'transparent',
+                border: 'none',
+                color: dossierFork === 'default' ? '#ddd' : '#666',
+                cursor: synthesisMode === 'live' ? 'pointer' : 'not-allowed',
+                fontSize: '0.55rem',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                padding: '6px 10px',
+              }}
+            >
+              Default
+            </button>
+            <button
+              type="button"
+              onClick={() => synthesisMode === 'live' && setDossierFork('spanify')}
+              title="Segment precontext into hypertext only (no full dossier rewrite)."
+              style={{
+                background: dossierFork === 'spanify' ? '#1c1c1c' : 'transparent',
+                border: 'none',
+                borderLeft: '1px solid #2a2a2a',
+                color: dossierFork === 'spanify' ? '#ddd' : '#666',
+                cursor: synthesisMode === 'live' ? 'pointer' : 'not-allowed',
+                fontSize: '0.55rem',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                padding: '6px 10px',
+              }}
+            >
+              Precontext → hypertext
+            </button>
+          </div>
+          {synthesisMode !== 'live' && (
+            <span style={{ fontSize: '0.6rem', color: '#666', maxWidth: 280, lineHeight: 1.35 }}>
+              Fork only runs in <strong style={{ color: '#999' }}>Live</strong> synthesis — use the Live / Queued toggle in the top bar.
+            </span>
+          )}
+        </div>
       </div>
 
       <div style={{ padding: '22px 28px 36px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -342,6 +438,37 @@ export function ConceptDossier() {
             <SectionHeader
               label="SYNTHESIS"
               accent={typeColor}
+              badge={
+                data.synthesis_variant === 'spanify_precontext' ? (
+                  <span
+                    style={{
+                      fontSize: '0.52rem',
+                      letterSpacing: '0.12em',
+                      fontWeight: 700,
+                      color: '#6ab8ff',
+                      textTransform: 'uppercase',
+                      padding: '3px 8px',
+                      border: '1px solid rgba(106, 184, 255, 0.35)',
+                      borderRadius: 3,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Fork: precontext → hypertext
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: '0.52rem',
+                      letterSpacing: '0.12em',
+                      fontWeight: 600,
+                      color: '#555',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Full dossier synthesis
+                  </span>
+                )
+              }
               actions={
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button
@@ -393,7 +520,12 @@ export function ConceptDossier() {
             <SourcesStrip evidence={data.evidence} onOpen={openDoc} />
             {data.generator && (
               <div style={{ marginTop: 14, fontSize: '0.55rem', color: '#333', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
-                {data.profile ?? synthesisMode} · generated by {data.generator}
+                {data.profile ?? synthesisMode}
+                {' · '}
+                {data.synthesis_variant === 'spanify_precontext'
+                  ? 'precontext → hypertext fork'
+                  : 'full synthesis'}
+                {' · '}generated by {data.generator}
                 {data.model ? ` · ${data.model}` : ''}
               </div>
             )}
@@ -431,7 +563,7 @@ export function ConceptDossier() {
               onRetry={() => {
                 if (!conceptSlug) return;
                 setLoading(true);
-                fetch(`${buildDossierUrl(conceptSlug, synthesisMode, branchContext)}&t=${Date.now()}`)
+                fetch(`${buildDossierUrl(conceptSlug, synthesisMode, branchContext, effectiveFork)}&t=${Date.now()}`)
                   .then((r) => r.json())
                   .then((d) => {
                     setData(d);
@@ -462,6 +594,7 @@ export function ConceptDossier() {
                   from: branchContext.fromSlug ?? undefined,
                   root: branchContext.rootSlug ?? undefined,
                   branch: branchContext.branchId ?? undefined,
+                  fork: effectiveFork === 'spanify' ? 'spanify' : undefined,
                 }),
               })
                 .then((r) => r.json())
@@ -888,9 +1021,11 @@ function LoadingState({
 function buildDossierUrl(
   slug: string,
   mode: 'live' | 'queued',
-  branchContext: { branchId: string | null; rootSlug: string | null; fromSlug: string | null }
+  branchContext: { branchId: string | null; rootSlug: string | null; fromSlug: string | null },
+  fork: 'default' | 'spanify' = 'default'
 ) {
   const params = new URLSearchParams({ mode });
+  if (mode === 'live' && fork === 'spanify') params.set('fork', 'spanify');
   if (branchContext.fromSlug) params.set('from', branchContext.fromSlug);
   if (branchContext.rootSlug) params.set('root', branchContext.rootSlug);
   if (branchContext.branchId) params.set('branch', branchContext.branchId);
@@ -1086,10 +1221,12 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
 function SectionHeader({
   label,
   accent = '#888',
+  badge,
   actions,
 }: {
   label: string;
   accent?: string;
+  badge?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
@@ -1102,7 +1239,16 @@ function SectionHeader({
         flexWrap: 'wrap',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flex: 1, minWidth: 120 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          flex: 1,
+          minWidth: 120,
+          flexWrap: 'wrap',
+        }}
+      >
         <span
           style={{
             fontSize: '0.6rem',
@@ -1114,6 +1260,7 @@ function SectionHeader({
         >
           {label}
         </span>
+        {badge}
         <div style={{ flex: 1, height: 1, background: '#181818', minWidth: 24 }} />
       </div>
       {actions}

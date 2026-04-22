@@ -315,6 +315,19 @@ export function Panorama({
               </button>
             ))}
           </div>
+          <span
+            style={{
+              fontSize: type.stamp,
+              letterSpacing: '0.1em',
+              color: 'var(--text-dim)',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+              maxWidth: 140,
+            }}
+            title="Open a concept dossier (right drawer). Under the title, use “Dossier engine (fork)”: Default = full synthesis; Precontext → hypertext = segment precontext only (Live mode)."
+          >
+            fork → dossier
+          </span>
         </div>
       </div>
 

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "npx tsc --noEmit && npx tsx scripts/smoke-tier15.ts ../fixtures/smoke-corpus",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
     "ingest": "tsx scripts/ingest.ts",
