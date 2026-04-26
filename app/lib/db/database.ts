@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS documents (
   word_count INTEGER DEFAULT 0,
   file_mtime INTEGER NOT NULL,
   ingested_at INTEGER NOT NULL,
-  source_kind TEXT NOT NULL DEFAULT 'markdown',  -- markdown | text | svg
+  source_kind TEXT NOT NULL DEFAULT 'markdown',  -- markdown | text | svg | html | code
   source_ext TEXT NOT NULL DEFAULT '.md'         -- lowercased extension, incl. dot
 );
 
@@ -357,7 +357,7 @@ function migrateSynthesisQueue(db: Database.Database) {
 }
 
 // Tier 1.5: documents grew a source_kind + source_ext column so we can
-// remember how each row was parsed (markdown vs text vs svg). Existing rows
+// remember how each row was parsed (markdown vs text vs svg/html/code). Existing rows
 // all came from markdown ingest, so we default-fill them accordingly.
 function migrateDocumentsSource(db: Database.Database) {
   const cols = db.prepare('PRAGMA table_info(documents)').all() as Array<{ name: string }>;

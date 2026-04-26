@@ -9,11 +9,11 @@ interface IngestBody {
   workspace_id: string;
   docs_path?: string;
   user_guidance?: string;
-  /** When true, also ingest common source-code extensions (opt-in per workspace). */
+  /** When false, skip common source-code extensions. */
   include_code?: boolean;
 }
 
-// Runs a markdown ingestion into the given workspace's SQLite file. The
+// Runs corpus ingestion into the given workspace's SQLite file. The
 // default docs_path is the workspace folder itself, so opening a workspace
 // the first time is a "pick folder → ingest that folder" flow.
 export async function POST(req: NextRequest) {

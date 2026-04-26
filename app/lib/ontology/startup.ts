@@ -1,5 +1,6 @@
 import { getDb } from '../db/database';
 import {
+  clearGeneratedArtifacts,
   clearStaleGeneratedArtifacts,
   completeOntologyRun,
   enqueueSynthesis,
@@ -44,7 +45,10 @@ interface LensDraft {
   order_index?: number;
 }
 
-export async function rebuildOntology(startupMode: StartupMode) {
+export async function rebuildOntology(
+  startupMode: StartupMode,
+  options: { clearGenerated?: boolean } = {}
+) {
   const meta = getProjectMeta();
   const corpusSignature = meta.corpus_signature;
   if (!corpusSignature) {
@@ -57,10 +61,14 @@ export async function rebuildOntology(startupMode: StartupMode) {
   });
 
   try {
-    clearStaleGeneratedArtifacts({
-      currentCorpusSignature: corpusSignature,
-      ontologyCorpusSignature: getStartupStatus().ontology_corpus_signature,
-    });
+    if (options.clearGenerated) {
+      clearGeneratedArtifacts(corpusSignature);
+    } else {
+      clearStaleGeneratedArtifacts({
+        currentCorpusSignature: corpusSignature,
+        ontologyCorpusSignature: getStartupStatus().ontology_corpus_signature,
+      });
+    }
     const packet = buildCorpusPacket();
     const shape = describeCorpusShape(packet, meta);
     const overview = await runOverviewPass(packet, meta, shape);
@@ -104,7 +112,7 @@ export async function ensureOntologyReady(startupMode: StartupMode) {
 function buildCorpusPacket() {
   const db = getDb();
   // Status buckets (canon / working / active / reference / brainstorm / archive)
-  // come out of the markdown frontmatter parser and are generic across projects.
+  // come out of parsed file metadata and are generic across projects.
   // Within each bucket we just order by recency + size; no project-specific
   // category bias.
   const docs = db
@@ -287,7 +295,7 @@ async function runOverviewPass(
   meta: ReturnType<typeof getProjectMeta>,
   shape: CorpusShape
 ) {
-  const prompt = `You are building the startup ontology overview for Bird Brain, a local-first project intelligence console. Bird Brain runs over an arbitrary folder of markdown — it could be a game design archive, a research notebook, a daily journal, a company wiki, or anything else. Infer the project's nature from the actual corpus; do not assume a default genre.
+  const prompt = `You are building the startup ontology overview for Bird Brain, a local-first project intelligence console. Bird Brain runs over an arbitrary folder of readable files — markdown, text, HTML, SVG, structured data, and source code. It could be a game design archive, a research notebook, a daily journal, a company wiki, a codebase, or anything else. Infer the project's nature from the actual corpus; do not assume a default genre.
 
 Project name: ${meta.project_name}
 Corpus shape: ${describeShapeForPrompt(shape)}
@@ -382,7 +390,7 @@ function buildConceptPrompt(
     overview.preferred_types.length > 0
       ? overview.preferred_types.join(', ')
       : 'person, place, event, theme, practice, system, organization, artifact, concept, state, work';
-  return `You are extracting the startup ontology for Bird Brain over an arbitrary markdown corpus. The corpus could be any kind of project; infer the right ontology from what you actually see.
+  return `You are extracting the startup ontology for Bird Brain over an arbitrary readable-file corpus. The corpus could be any kind of project; infer the right ontology from what you actually see.
 ${inclusiveHint}
 Project: ${meta.project_name}
 Corpus shape: ${describeShapeForPrompt(shape)}

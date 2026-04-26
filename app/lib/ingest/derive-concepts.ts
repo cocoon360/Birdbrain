@@ -1,7 +1,7 @@
 // Derive seeded concepts from the corpus itself.
 //
 // The engine knows nothing about any particular project. Pointed at a folder
-// of markdown, it stacks signals (filenames, headings, proper-noun tokens in
+// of readable files, it stacks signals (filenames, headings, proper-noun tokens in
 // body text) and promotes candidates that cross thresholds into seeded
 // entities. This is the same machinery that will later promote candidates
 // from participation events — the only difference is the trigger.

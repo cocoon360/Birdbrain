@@ -7,7 +7,7 @@ import {
 } from '@/lib/engine/secrets';
 
 // Lets the UI report which secrets exist and lets the user store one into
-// the local ~/.birdbrain/secrets.json fallback. In the desktop build the
+// the local data/secrets.json fallback. In the desktop build the
 // registered resolver will intercept before we hit local storage so the
 // OS keychain wins. This route never returns the secret value itself.
 

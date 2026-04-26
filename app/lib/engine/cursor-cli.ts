@@ -5,6 +5,7 @@ import { EngineError } from './types';
 // Wraps the existing Cursor Agent CLI runner in the Engine interface.
 // This keeps the binary + logged-in Cursor account as the default path
 // so an existing Cursor Pro+ user doesn't need to paste API keys.
+const DEFAULT_CURSOR_MODEL = 'gpt-5.5-medium';
 
 export class CursorCliEngine implements Engine {
   readonly provider = 'cursor-cli' as const;
@@ -12,15 +13,15 @@ export class CursorCliEngine implements Engine {
 
   constructor(config: EngineConfig) {
     const fromEnv = process.env.CURSOR_AGENT_MODEL;
-    // First-run default: cheapest Opus 4.7 variant that the cursor-agent
-    // CLI actually accepts. Users can override in the engine drawer.
+    // First-run default: GPT-5.5 Medium gives strong synthesis quality at a
+    // lower current price point. Users can override in the engine drawer.
     this.defaultModel =
-      (config.model || fromEnv || 'claude-opus-4-7-low').trim() || 'claude-opus-4-7-low';
+      (config.model || fromEnv || DEFAULT_CURSOR_MODEL).trim() || DEFAULT_CURSOR_MODEL;
   }
 
   async generate(options: GenerateOptions): Promise<string> {
     try {
-      const model = (options.model || this.defaultModel || '').trim() || 'claude-opus-4-7-low';
+      const model = (options.model || this.defaultModel || '').trim() || DEFAULT_CURSOR_MODEL;
       return await runCursorAgent({
         prompt: options.prompt,
         model,

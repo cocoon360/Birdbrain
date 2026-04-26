@@ -46,7 +46,7 @@ export interface RunIngestionOptions {
 }
 
 function parseBoolMeta(v: string | undefined): boolean {
-  if (!v) return false;
+  if (!v) return true;
   const s = v.trim().toLowerCase();
   return s === '1' || s === 'true' || s === 'yes';
 }

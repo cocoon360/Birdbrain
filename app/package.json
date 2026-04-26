@@ -9,7 +9,7 @@
     "start": "next start",
     "ingest": "tsx scripts/ingest.ts",
     "eval:dossiers": "tsx scripts/eval-dossiers.ts",
-    "build:sidecar": "npm run build && node scripts/pack-sidecar.mjs",
+    "build:sidecar": "BIRDBRAIN_STANDALONE=1 npm run build && node scripts/pack-sidecar.mjs",
     "start:sidecar": "node .next/standalone/server.js",
     "tauri:dev": "sh -c 'cd ../src-tauri && cargo tauri dev'",
     "tauri:build": "sh -c 'cd ../src-tauri && env -u CI cargo tauri build'"

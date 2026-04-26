@@ -91,9 +91,12 @@ interface BranchStore {
 }
 
 function loadMode(workspaceId: string | null): SynthesisMode {
-  if (typeof window === 'undefined') return 'live';
-  const raw = window.localStorage.getItem(modeKey(workspaceId));
-  return raw === 'queued' ? 'queued' : 'live';
+  if (typeof window === 'undefined') return 'queued';
+  const key = modeKey(workspaceId);
+  if (window.localStorage.getItem(key) === 'live') {
+    window.localStorage.setItem(key, 'queued');
+  }
+  return 'queued';
 }
 
 function loadBranches(workspaceId: string | null): BranchStore {
@@ -123,6 +126,13 @@ function saveBranches(store: BranchStore, workspaceId: string | null) {
   }
 }
 
+/** Re-open the last step in the active trail after a full reload (new app session / window). */
+function conceptSlugToRestoreFromStore(store: BranchStore): string | null {
+  if (!store.activeBranchId) return null;
+  const b = store.branches.find((br) => br.id === store.activeBranchId);
+  return b?.currentSlug ?? null;
+}
+
 function branchId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return `branch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -145,7 +155,7 @@ export function DossierProvider({ children }: { children: ReactNode }) {
   const workspaceId = workspace?.id ?? null;
   const [conceptSlug, setConceptSlug] = useState<string | null>(null);
   const [docId, setDocId] = useState<number | null>(null);
-  const [synthesisMode, setSynthesisModeState] = useState<SynthesisMode>('live');
+  const [synthesisMode, setSynthesisModeState] = useState<SynthesisMode>('queued');
   const [branchStore, setBranchStore] = useState<BranchStore>({
     schemaVersion: 2,
     branches: [],
@@ -157,9 +167,10 @@ export function DossierProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem(LEGACY_BRANCH_KEY);
     }
     setSynthesisModeState(loadMode(workspaceId));
-    setBranchStore(loadBranches(workspaceId));
-    setConceptSlug(null);
+    const store = loadBranches(workspaceId);
+    setBranchStore(store);
     setDocId(null);
+    setConceptSlug(conceptSlugToRestoreFromStore(store));
   }, [workspaceId]);
 
   useEffect(() => {

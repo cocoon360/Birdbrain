@@ -142,6 +142,13 @@ function buildPrecontextPrompt(input: {
           })
           .join('\n\n')
       : '(No direct snippets were retrieved for this concept.)';
+  const authorityBlock = `SOURCE AUTHORITY
+- Treat canon, working, and active evidence as the current project truth.
+- Treat reference as background context.
+- Treat brainstorm and archive evidence as exploratory or older unless current evidence confirms it.
+- If older/exploratory/background evidence disagrees with current evidence, follow the current evidence and do not repeat the older claim as true.
+- Be especially careful with capability/structure claims such as who is playable, who is a POV character, what has been scrapped, what is locked, or what is no longer true. Only state those claims when current evidence supports them.
+- If evidence says something was scrapped, removed, no longer true, replaced, or old, preserve that negation. Do not revive the older version.`;
   const relatedBlock =
     related.length > 0
       ? related
@@ -176,6 +183,8 @@ ${relatedBlock}
 PROJECT EVIDENCE:
 ${evidenceBlock}
 
+${authorityBlock}
+
 Return ONLY valid JSON with this shape:
 {
   "plain_definition": "string",
@@ -198,6 +207,7 @@ Writing rules (apply to every field):
 - First mention of any proper noun, character name, place, artifact, or internal system name must carry enough context in the same sentence for a cold reader to know what it is. Do not reference "the sabotage", "the antagonist", "the incident", or a character by name as if the reader already knows.
 - Do not use these words unless you rewrite them into ordinary language: lane, tier, status, artifact, framework, integration (as a system noun), mechanic (as a noun), operationalize, locked.
 - Describe the thing, never its footprint in the files. No "appears in", "is mentioned in", "the document describes".
+- When evidence conflicts, write the current version plainly; do not summarize both versions unless the conflict itself is important to understanding ${entity.name}.
 - Do not talk about the app, the tool, snippets, or how the briefing was made.
 - No markdown fence. Raw JSON only.`;
 }

@@ -32,7 +32,7 @@ const PROVIDER_COPY: Record<Provider, { title: string; blurb: string; modelHint:
   'cursor-cli': {
     title: 'Cursor CLI',
     blurb: 'Uses your logged-in cursor-agent binary. No API key needed.',
-    modelHint: 'e.g. auto, claude-opus-4-7-high (run: agent models)',
+    modelHint: 'e.g. gpt-5.5-medium, auto (run: agent models)',
     keyHint: 'not used (auth via cursor-agent login)',
   },
   openai: {
@@ -313,7 +313,7 @@ export function EngineSettingsDrawer({
             marginBottom: space.lg,
           }}
         >
-          Pick which model Bird Brain calls for synthesis, ontology, and briefs. This is stored on
+          Pick which model Bird Brain calls for project mapping, dossiers, and briefs. This is stored on
           the workspace so different projects can use different engines.
         </div>
 
@@ -535,7 +535,7 @@ export function EngineSettingsDrawer({
                       lineHeight: 1.5,
                     }}
                   >
-                    Local file lives at <code style={{ color: 'var(--text-dim)' }}>~/.birdbrain/secrets.json</code>{' '}
+                    Local file lives at <code style={{ color: 'var(--text-dim)' }}>data/secrets.json</code>{' '}
                     with permissions 600. The desktop build overrides this with the OS keychain.
                   </div>
                 </div>

@@ -141,9 +141,23 @@ export async function synthesizeForSlug(
   const engine = getEngineForWorkspace();
   const model = engine.defaultModel;
   const generateStart = Date.now();
-  const raw = await engine.generate({ prompt });
+  let raw = await engine.generate({ prompt });
   const generateMs = Date.now() - generateStart;
-  const paragraph = parseParagraph(raw);
+  let paragraph = parseParagraph(raw);
+  if (paragraph && !paragraphStartsWithTarget(paragraph, entity.name, selfAliases)) {
+    const firstLead = paragraphPlain(paragraph).slice(0, 140);
+    // eslint-disable-next-line no-console
+    console.warn(`[synthesize] retrying ${slug}; first draft started off-target: ${firstLead}`);
+    raw = await engine.generate({
+      prompt: `${prompt}
+
+CRITICAL RETRY: Your previous answer did not keep "${entity.name}" as the subject.
+Start the first sentence with "${entity.name}" or a direct alias for it. Explain THIS ${entity.type}; do not start with another linked concept, event, incident, place, or artifact. Other concepts may appear only as context after the reader understands what "${entity.name}" is.
+
+If you cannot satisfy that, return a two-sentence paragraph based only on the BRIEF for "${entity.name}".`,
+    });
+    paragraph = parseParagraph(raw);
+  }
   if (!paragraph) {
     throw new EngineError(
       engine.provider,
@@ -151,6 +165,12 @@ export async function synthesizeForSlug(
       `${engine.provider} returned output that could not be parsed as a paragraph`,
       raw.slice(0, 500)
     );
+  }
+  if (!paragraphStartsWithTarget(paragraph, entity.name, selfAliases)) {
+    const fallbackText = canonicalFallbackText(entity.name, precontext);
+    // eslint-disable-next-line no-console
+    console.warn(`[synthesize] using canonical fallback for ${slug}; retry remained off-target`);
+    paragraph = [{ text: fallbackText }];
   }
 
   const reconciled = reconcileSpans(paragraph, slug);
@@ -274,6 +294,31 @@ async function synthesizeSpanifyOnlyFromPrecontext(
 
 function paragraphPlain(p: Paragraph): string {
   return p.map((s) => s.text).join('');
+}
+
+function paragraphStartsWithTarget(paragraph: Paragraph, entityName: string, aliases: string[]): boolean {
+  const lead = paragraphPlain(paragraph).trimStart().slice(0, 220).toLowerCase();
+  const targets = [entityName, ...aliases]
+    .map((value) => value.trim().toLowerCase())
+    .filter((value, index, arr) => value.length >= 2 && arr.indexOf(value) === index);
+  return targets.some((target) => {
+    if (!lead.startsWith(target)) return false;
+    const next = lead.charAt(target.length);
+    return !next || /[\s,.;:!?()[\]'"-]/.test(next);
+  });
+}
+
+function canonicalFallbackText(entityName: string, precontext: ConceptPrecontextRow): string {
+  const candidate =
+    [precontext.plain_definition, precontext.project_role, precontext.study_relevance]
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .join(' ') ||
+    precontext.precontext_text?.trim() ||
+    entityName;
+  const normalized = candidate.replace(/\s+/g, ' ').trim();
+  if (normalized.toLowerCase().startsWith(entityName.toLowerCase())) return normalized;
+  return `${entityName} is best understood this way: ${normalized}`;
 }
 
 function spansMatchCanonical(paragraph: Paragraph, canonical: string): boolean {
@@ -519,7 +564,7 @@ function buildPrompt(input: PromptInput): string {
     entitySummary.length > 0
       ? `ONTOLOGY SEED (may be incomplete — if it disagrees with a numbered snippet, ignore the seed for that point):\n${entitySummary}`
       : 'ONTOLOGY SEED: (none)';
-  const precontextBlock = `PRECONTEXT (already written for this concept — use as grounding, do not quote):
+  const precontextBlock = `BRIEF (already written for THIS concept — this is the anchor; evidence may add detail but must not change the subject):
 - Plain definition: ${precontext.plain_definition}
 - Role in ${projectName}: ${precontext.project_role}
 - Why it matters: ${precontext.study_relevance}
@@ -555,6 +600,14 @@ function buildPrompt(input: PromptInput): string {
 - fts_recall — lexical search hit; verify the concept is actually discussed, not a false match.
 - from_peer — passage from the concept you navigated from; secondary context only.`;
 
+  const authorityBlock = `SOURCE AUTHORITY
+- Treat canon, working, and active snippets as the current project truth.
+- Treat reference snippets as background context.
+- Treat brainstorm and archive snippets as exploratory or older unless current snippets confirm them.
+- If older/exploratory/background snippets disagree with current snippets, follow the current snippets and do not repeat the older claim as true.
+- Be especially careful with capability/structure claims such as who is playable, who is a POV character, what has been scrapped, what is locked, or what is no longer true. Only state those claims when current snippets or the BRIEF support them.
+- If snippets say something was scrapped, removed, no longer true, replaced, or old, preserve that negation. Do not revive the older version.`;
+
   const evidenceBlock = hasEvidence
     ? evidence
         .map((e, i) => {
@@ -570,23 +623,23 @@ function buildPrompt(input: PromptInput): string {
     .map((k) => `- ${k.slug} · ${k.name} (${k.type})`)
     .join('\n');
 
-  const wordTarget = profile === 'queued' ? '95–165' : '70–125';
-  const sentenceTarget = profile === 'queued' ? '3–4' : '2–4';
+  const wordTarget = profile === 'queued' ? '130–220' : '70–125';
+  const sentenceTarget = profile === 'queued' ? '4–5' : '2–4';
 
   const taskWithEvidence = `TASK (${sentenceTarget} sentences, ~${wordTarget} words)
-Write one paragraph about ${entity.name} for a reader who is trying to understand it better right now. Do not assume they have read anything else in ${projectName}.
+Write one paragraph that is basically the BRIEF for ${entity.name}, but a little deeper and hypertext-ready. Do not write a second independent interpretation. Do not assume the reader has read anything else in ${projectName}.
 
-Answer, in this order, in smooth prose — no headings, no labels, no scaffolding:
+Preserve the briefing's spine, in this order, in smooth prose — no headings, no labels, no scaffolding:
   1. What ${entity.name} is, in plain language.
-  2. What it actually does inside ${projectName}, grounded in the numbered snippets below.
-  3. Why it matters — what would be missing from ${projectName} without it.
+  2. What role it plays inside ${projectName}.
+  3. Why it matters.
 
-Use PRECONTEXT for grounding; use the snippets for project-specific detail. Prefer direct snippets, then neighbor, then fts_recall / from_peer only when clearly on-topic. Touch at least one direct snippet. If snippets are thin or repetitive, say less with more precision — one grounded sentence beats three hedged ones.
+Use the BRIEF as the source paragraph. You may add only 1–3 concrete details from the snippets, and only when they clarify ${entity.name}. Prefer direct snippets, then neighbor, then fts_recall / from_peer only when clearly on-topic. If snippets pull toward a neighboring concept, keep ${entity.name} as the subject and use that neighboring concept only as context. If snippets are thin, stale, contradictory, or repetitive, stay close to the brief.
 
 INTERNAL routing lines may bias which snippet you foreground, but never explain navigation in prose.`;
 
   const taskNoEvidence = `TASK (exactly two short sentences, ≤45 words total)
-Write one paragraph about ${entity.name} for a reader trying to understand it. Use PRECONTEXT only — do not invent file-local details.
+Write one paragraph about ${entity.name} for a reader trying to understand it. Use the BRIEF only — do not invent file-local details.
 
 Sentence 1: what ${entity.name} is, in plain language.
 Sentence 2: what it seems to mean inside ${projectName}.
@@ -617,6 +670,8 @@ ${provenance}
 EVIDENCE FROM ${projectName} (numbered — ground truth for project-specific claims. The plain orienting line about what ${entity.name} is does NOT need to be traceable to a snippet):
 ${evidenceBlock}
 
+${authorityBlock}
+
 ${bannedWhenEvidence}
 
 KNOWN CONCEPTS (slugs for "known" spans — describe them in-world for ${projectName}, not as software objects):
@@ -634,10 +689,14 @@ Each span is one of:
 
 RULES
 - One voice throughout. Plain, specific, smooth. The reader should feel like a thoughtful collaborator is briefing them, not like they are reading a system note or a dictionary.
+- The first sentence must keep ${entity.name} as the grammatical subject. Start with ${entity.name} or one of its aliases. Do not start with a related event, incident, place, antagonist, theme, or linked concept.
+- The paragraph is about ${entity.name}, not about the most dramatic related concept in the snippets. Related concepts may clarify ${entity.name}; they may not become the paragraph's subject.
+- If ${entity.name} is a person, explain who they are before explaining what happens around them. Incidents they witness or investigate are context, not the subject of the paragraph.
 - The first sentence orients — it should read like a person briefing someone in, not a glossary entry. Skip "X is a…", "refers to…", "can be understood as…" unless ${entity.name} is genuinely obscure.
 - Every proper noun, character name, place, artifact, or internal system name must carry enough context in its own sentence for a cold reader to know what it is. Do not reference "the sabotage", "the antagonist", "the incident", or a character name as if the reader already knows.
 - Do not use these words unless you rewrite them into ordinary language: lane, tier, status, artifact, framework, integration (as a system noun), mechanic (as a noun), operationalize, locked.
-- If PRECONTEXT or snippets use internal or systematic wording, translate it — do not echo it.
+- If the brief or snippets use internal or systematic wording, translate it — do not echo it.
+- If the brief or older snippets conflict with current snippets, write the current version plainly; do not summarize both versions unless the conflict itself is important to understanding ${entity.name}.
 - Prefer the project's own verbs and specifics over taxonomy labels.
 - Describe ${entity.name}, never its footprint in the files. No "appears in", "is mentioned in", "the document describes".
 - Do not mention the app, the tool, branches, queues, or how the paragraph was written.

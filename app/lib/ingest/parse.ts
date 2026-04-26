@@ -33,9 +33,9 @@ export interface IngestableFile {
 
 // ── File-type classification ──────────────────────────────────────────────────
 //
-// Tier 1.5: markdown / text / HTML / SVG always; source code is opt-in per
-// workspace (`ingest_include_code` in project_meta) so a random repo checkout
-// does not flood the ontology. Binary formats stay deferred.
+// Markdown / text / HTML / SVG / common source-code extensions are readable by
+// default. Dependency/build folders are skipped below so a repo checkout does
+// not flood the ontology with generated output. Binary formats stay deferred.
 
 const MARKDOWN_EXT = new Set(['.md', '.markdown', '.mdown']);
 const TEXT_EXT = new Set([
@@ -55,7 +55,7 @@ const TEXT_EXT = new Set([
 const SVG_EXT = new Set(['.svg']);
 const HTML_EXT = new Set(['.html', '.htm', '.xml']);
 
-/** Opt-in only — see `walkIngestableFiles(..., { includeCode })`. */
+/** Can be disabled via `walkIngestableFiles(..., { includeCode: false })`. */
 const CODE_EXT = new Set([
   '.ts',
   '.tsx',
@@ -548,7 +548,7 @@ export function parseIngestableFile(file: IngestableFile, docsRoot: string): Par
       ];
     }
   } else {
-    // code (opt-in extensions)
+    // code
     const raw = fs.readFileSync(file.path, 'utf-8');
     const lang = langFromExt(file.ext);
     title = titleFromFilename(file.path);
@@ -600,12 +600,12 @@ export function parseMarkdownFile(absPath: string, docsRoot: string): ParsedDocu
 // ── Directory walker ──────────────────────────────────────────────────────────
 
 export interface WalkIngestableOptions {
-  /** When true, also collect common source-code extensions (see CODE_EXT). */
+  /** When false, skip common source-code extensions (see CODE_EXT). */
   includeCode?: boolean;
 }
 
 export function walkIngestableFiles(dir: string, options: WalkIngestableOptions = {}): IngestableFile[] {
-  const includeCode = Boolean(options.includeCode);
+  const includeCode = options.includeCode !== false;
   const results: IngestableFile[] = [];
   function walk(current: string) {
     let entries: fs.Dirent[];

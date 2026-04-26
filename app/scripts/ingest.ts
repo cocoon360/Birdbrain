@@ -33,7 +33,7 @@ async function main() {
   if (!process.env.DOCS_PATH && !fs.existsSync(docsPath)) {
     console.error(
       'No DOCS_PATH set and fixtures/smoke-corpus is missing.\n' +
-        '  DOCS_PATH=/absolute/path/to/your/markdown npm run ingest\n' +
+        '  DOCS_PATH=/absolute/path/to/your/project npm run ingest\n' +
         'Or keep the repo fixtures/ folder intact for the default smoke corpus.'
     );
     process.exit(1);

@@ -3,10 +3,9 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 
-// Workspace registry. A workspace is a folder on disk that Bird Brain has
-// ingested into its own self-contained `.birdbrain/app.db` SQLite file. The
-// registry at ~/.birdbrain/workspaces.json is the only source of truth for
-// which folders exist as workspaces and where their databases live.
+// Workspace registry. A workspace is a folder on disk that Bird Brain reads,
+// while Bird Brain's own app data lives under the repo-level data/ folder. We
+// intentionally do not create hidden database folders inside the source corpus.
 
 export interface WorkspaceRecord {
   id: string;
@@ -22,31 +21,72 @@ interface RegistryFile {
   workspaces: WorkspaceRecord[];
 }
 
-const REGISTRY_DIR = path.join(os.homedir(), '.birdbrain');
-const REGISTRY_PATH = path.join(REGISTRY_DIR, 'workspaces.json');
+const LEGACY_HOME_DIR = path.join(os.homedir(), '.birdbrain');
+const LEGACY_REGISTRY_PATH = path.join(LEGACY_HOME_DIR, 'workspaces.json');
+const LEGACY_WORKSPACE_DB_DIR = path.join(LEGACY_HOME_DIR, 'workspace-dbs');
+const APP_DATA_DIR = process.env.BIRDBRAIN_DATA_DIR
+  ? path.resolve(process.env.BIRDBRAIN_DATA_DIR)
+  : path.resolve(process.cwd(), path.basename(process.cwd()) === 'app' ? '..' : '.', 'data');
+const REGISTRY_PATH = path.join(APP_DATA_DIR, 'workspaces.json');
+const WORKSPACE_DB_DIR = path.join(APP_DATA_DIR, 'workspace-dbs');
 const DEFAULT_FILE: RegistryFile = { schemaVersion: 1, workspaces: [] };
 
 function ensureRegistryDir() {
-  if (!fs.existsSync(REGISTRY_DIR)) {
-    fs.mkdirSync(REGISTRY_DIR, { recursive: true });
+  if (!fs.existsSync(APP_DATA_DIR)) {
+    fs.mkdirSync(APP_DATA_DIR, { recursive: true });
   }
+}
+
+function readRegistryFile(filePath: string): RegistryFile | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw) as RegistryFile;
+    if (typeof parsed !== 'object' || !Array.isArray(parsed.workspaces)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function workspaceFolderKey(folderPath: string) {
+  return path.resolve(folderPath).toLowerCase();
+}
+
+function mergeLegacyRegistry(reg: RegistryFile): RegistryFile {
+  const legacy = readRegistryFile(LEGACY_REGISTRY_PATH);
+  if (!legacy) return reg;
+
+  const ids = new Set(reg.workspaces.map((workspace) => workspace.id));
+  const folders = new Set(reg.workspaces.map((workspace) => workspaceFolderKey(workspace.folder_path)));
+  const merged = [...reg.workspaces];
+  let changed = false;
+
+  for (const workspace of legacy.workspaces) {
+    if (ids.has(workspace.id) || folders.has(workspaceFolderKey(workspace.folder_path))) continue;
+    merged.push(workspace);
+    ids.add(workspace.id);
+    folders.add(workspaceFolderKey(workspace.folder_path));
+    changed = true;
+  }
+
+  if (!changed) return reg;
+  const next = { ...reg, workspaces: merged };
+  writeRegistry(next);
+  return next;
 }
 
 function readRegistry(): RegistryFile {
   ensureRegistryDir();
+  if (!fs.existsSync(REGISTRY_PATH) && fs.existsSync(LEGACY_REGISTRY_PATH)) {
+    fs.copyFileSync(LEGACY_REGISTRY_PATH, REGISTRY_PATH);
+  }
   if (!fs.existsSync(REGISTRY_PATH)) {
     return { ...DEFAULT_FILE };
   }
-  try {
-    const raw = fs.readFileSync(REGISTRY_PATH, 'utf-8');
-    const parsed = JSON.parse(raw) as RegistryFile;
-    if (typeof parsed !== 'object' || !Array.isArray(parsed.workspaces)) {
-      return { ...DEFAULT_FILE };
-    }
-    return parsed;
-  } catch {
-    return { ...DEFAULT_FILE };
-  }
+  return mergeLegacyRegistry(readRegistryFile(REGISTRY_PATH) ?? { ...DEFAULT_FILE });
 }
 
 function writeRegistry(data: RegistryFile) {
@@ -74,22 +114,55 @@ function deriveWorkspaceName(folderPath: string) {
   );
 }
 
-function defaultDbPathFor(folderPath: string) {
+function appOwnedDbPathFor(workspaceId: string) {
+  return path.join(WORKSPACE_DB_DIR, workspaceId, 'app.db');
+}
+
+function oldInCorpusDbPathFor(folderPath: string) {
   return path.join(path.resolve(folderPath), '.birdbrain', 'app.db');
 }
 
+function legacyHomeDbPathFor(workspaceId: string) {
+  return path.join(LEGACY_WORKSPACE_DB_DIR, workspaceId, 'app.db');
+}
+
+function migrateWorkspaceStorage(reg: RegistryFile): RegistryFile {
+  let changed = false;
+  const workspaces = reg.workspaces.map((workspace) => {
+    const dbPath = path.resolve(workspace.db_path);
+    const oldInCorpusPath = oldInCorpusDbPathFor(workspace.folder_path);
+    const oldHomePath = legacyHomeDbPathFor(workspace.id);
+    const shouldMigrate =
+      dbPath === path.resolve(oldInCorpusPath) || dbPath === path.resolve(oldHomePath);
+    if (!shouldMigrate) return workspace;
+
+    const nextPath = appOwnedDbPathFor(workspace.id);
+    if (!fs.existsSync(path.dirname(nextPath))) fs.mkdirSync(path.dirname(nextPath), { recursive: true });
+    if (fs.existsSync(dbPath) && !fs.existsSync(nextPath)) {
+      fs.copyFileSync(dbPath, nextPath);
+    }
+    changed = true;
+    return { ...workspace, db_path: nextPath };
+  });
+
+  if (!changed) return reg;
+  const next = { ...reg, workspaces };
+  writeRegistry(next);
+  return next;
+}
+
 export function listWorkspaces(): WorkspaceRecord[] {
-  return readRegistry().workspaces;
+  return migrateWorkspaceStorage(readRegistry()).workspaces;
 }
 
 export function getWorkspace(id: string): WorkspaceRecord | null {
-  const reg = readRegistry();
+  const reg = migrateWorkspaceStorage(readRegistry());
   return reg.workspaces.find((w) => w.id === id) ?? null;
 }
 
 export function getWorkspaceByFolder(folderPath: string): WorkspaceRecord | null {
   const abs = path.resolve(folderPath);
-  const reg = readRegistry();
+  const reg = migrateWorkspaceStorage(readRegistry());
   return reg.workspaces.find((w) => path.resolve(w.folder_path) === abs) ?? null;
 }
 
@@ -110,17 +183,18 @@ export function addWorkspace(input: AddWorkspaceInput): WorkspaceRecord {
   const existing = getWorkspaceByFolder(folderAbs);
   if (existing) return existing;
 
+  const id = newWorkspaceId();
   const record: WorkspaceRecord = {
-    id: newWorkspaceId(),
+    id,
     name: (input.name ?? '').trim() || deriveWorkspaceName(folderAbs),
     folder_path: folderAbs,
-    db_path: path.resolve(input.dbPath ?? defaultDbPathFor(folderAbs)),
+    db_path: path.resolve(input.dbPath ?? appOwnedDbPathFor(id)),
     created_at: Math.floor(Date.now() / 1000),
     last_opened_at: null,
   };
 
-  // Make sure the .birdbrain/ dir exists next to the workspace folder (or
-  // wherever the caller asked for the DB to live).
+  // Make sure Bird Brain's app-owned DB directory exists. The source folder
+  // remains read-only from a storage/layout perspective.
   const dbDir = path.dirname(record.db_path);
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
@@ -131,7 +205,7 @@ export function addWorkspace(input: AddWorkspaceInput): WorkspaceRecord {
 }
 
 export function removeWorkspace(id: string): boolean {
-  const reg = readRegistry();
+  const reg = migrateWorkspaceStorage(readRegistry());
   const next = reg.workspaces.filter((w) => w.id !== id);
   if (next.length === reg.workspaces.length) return false;
   writeRegistry({ ...reg, workspaces: next });
@@ -139,7 +213,7 @@ export function removeWorkspace(id: string): boolean {
 }
 
 export function touchWorkspace(id: string) {
-  const reg = readRegistry();
+  const reg = migrateWorkspaceStorage(readRegistry());
   const idx = reg.workspaces.findIndex((w) => w.id === id);
   if (idx < 0) return;
   reg.workspaces[idx] = {
@@ -152,7 +226,7 @@ export function touchWorkspace(id: string) {
 export function renameWorkspace(id: string, name: string): WorkspaceRecord | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  const reg = readRegistry();
+  const reg = migrateWorkspaceStorage(readRegistry());
   const idx = reg.workspaces.findIndex((w) => w.id === id);
   if (idx < 0) return null;
   reg.workspaces[idx] = { ...reg.workspaces[idx], name: trimmed };
@@ -182,6 +256,10 @@ export function adoptLegacyWorkspace() {
   const legacyDocs = process.env.DOCS_PATH?.trim()
     ? path.resolve(process.env.DOCS_PATH.trim())
     : '';
+  // Without an explicit docs path, the legacy DB often points at app fixture
+  // data rather than a real project. Do not pollute the picker with a
+  // rebuildable/imported "Data" workspace.
+  if (!legacyDocs) return;
   const folderPath =
     legacyDocs && fs.existsSync(legacyDocs) ? legacyDocs : path.dirname(legacyDb);
 

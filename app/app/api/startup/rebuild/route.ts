@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const mode = body.mode ?? 'automatic-cached';
     try {
       if (body.force || mode === 'manual') {
-        const result = await rebuildOntology(mode);
+        const result = await rebuildOntology(mode, { clearGenerated: Boolean(body.force) });
         return NextResponse.json({ ok: true, rebuilt: true, result, status: getStartupStatus() });
       }
       const status = await ensureOntologyReady(mode);

@@ -1,13 +1,13 @@
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
 
 // Secret resolution order for API keys (OpenAI, Anthropic, etc.):
 //   1. Registered resolver — used by the Tauri wrapper to proxy to the
 //      OS keychain via IPC. Registered at boot from the desktop host.
 //   2. Process env vars — covers `npm run dev`, CI, and any sidecar
 //      started with the env already set.
-//   3. Local fallback file at ~/.birdbrain/secrets.json — convenience for
+//   3. Local fallback file at repo data/secrets.json — convenience for
 //      the web preview so users can paste a key into the UI without
 //      editing shell profiles. Plain JSON, chmod 600 on create. This is
 //      NOT considered secure; the OS keychain replaces it in desktop.
@@ -22,8 +22,11 @@ export function registerSecretResolver(resolver: SecretResolver | null) {
   registered = resolver;
 }
 
-const LOCAL_SECRETS_DIR = path.join(os.homedir(), '.birdbrain');
+const LOCAL_SECRETS_DIR = process.env.BIRDBRAIN_DATA_DIR
+  ? path.resolve(process.env.BIRDBRAIN_DATA_DIR)
+  : path.resolve(process.cwd(), path.basename(process.cwd()) === 'app' ? '..' : '.', 'data');
 const LOCAL_SECRETS_PATH = path.join(LOCAL_SECRETS_DIR, 'secrets.json');
+const LEGACY_LOCAL_SECRETS_PATH = path.join(os.homedir(), '.birdbrain', 'secrets.json');
 
 interface LocalSecretFile {
   [envVarName: string]: string;
@@ -31,6 +34,15 @@ interface LocalSecretFile {
 
 function readLocalSecrets(): LocalSecretFile {
   try {
+    if (!fs.existsSync(LOCAL_SECRETS_PATH) && fs.existsSync(LEGACY_LOCAL_SECRETS_PATH)) {
+      fs.mkdirSync(LOCAL_SECRETS_DIR, { recursive: true });
+      fs.copyFileSync(LEGACY_LOCAL_SECRETS_PATH, LOCAL_SECRETS_PATH);
+      try {
+        fs.chmodSync(LOCAL_SECRETS_PATH, 0o600);
+      } catch {
+        // chmod is best-effort on platforms that ignore it
+      }
+    }
     if (!fs.existsSync(LOCAL_SECRETS_PATH)) return {};
     const text = fs.readFileSync(LOCAL_SECRETS_PATH, 'utf8');
     const parsed = JSON.parse(text) as LocalSecretFile;

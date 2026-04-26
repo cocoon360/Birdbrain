@@ -9,7 +9,6 @@ import {
   chromeButtonStyle,
   metroFont,
   pivotItemStyle,
-  segmentedItemStyle,
   space,
   type,
 } from '@/lib/ui/metro-theme';
@@ -35,7 +34,7 @@ export function Panorama({
   workspaceName,
   onSwitchWorkspace,
 }: PanoramaProps) {
-  const { synthesisMode, setSynthesisMode, branches } = useDossier();
+  const { branches } = useDossier();
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [active, setActive] = useState<string>(initial ?? panels[0]?.id ?? '');
@@ -275,7 +274,12 @@ export function Panorama({
             </button>
           )}
           {onBeginAgain && (
-            <button type="button" onClick={onBeginAgain} style={chromeButtonStyle({})}>
+            <button
+              type="button"
+              onClick={onBeginAgain}
+              title="Return to startup in Always fresh mode. The next begin will rebuild the project map and clear cached briefs/dossiers."
+              style={chromeButtonStyle({})}
+            >
               begin again
             </button>
           )}
@@ -291,42 +295,18 @@ export function Panorama({
           >
             {unreadBranches > 0 ? `${unreadBranches} new branches` : 'branches quiet'}
           </div>
-          <div
-            style={{
-              display: 'flex',
-              minWidth: 160,
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-            }}
-          >
-            {(['live', 'queued'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setSynthesisMode(mode)}
-                style={segmentedItemStyle(synthesisMode === mode)}
-                title={
-                  mode === 'live'
-                    ? 'Open dossier and synthesize immediately'
-                    : 'Queue dossier synthesis and let the preview process it automatically'
-                }
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
           <span
             style={{
               fontSize: type.stamp,
               letterSpacing: '0.1em',
-              color: 'var(--text-dim)',
+              color: 'var(--accent)',
               textTransform: 'uppercase',
-              fontWeight: 600,
-              maxWidth: 140,
+              fontWeight: 700,
+              maxWidth: 220,
             }}
-            title="Open a concept dossier (right drawer). Under the title, use “Dossier engine (fork)”: Default = full synthesis; Precontext → hypertext = segment precontext only (Live mode)."
+            title="Concepts open in the primary queued dossier lane. Use the right drawer for optional Lite mode."
           >
-            fork → dossier
+            primary queued dossiers
           </span>
         </div>
       </div>

@@ -3,6 +3,7 @@ import {
   getCorpusStats,
   getProjectMeta,
   getEmergedEntities,
+  getOntologyConceptRows,
   getStarterLensConcepts,
   getStartupStatus,
 } from '@/lib/db/queries';
@@ -23,6 +24,7 @@ export async function GET(req: Request) {
       meta: getProjectMeta(),
       stats: getCorpusStats(),
       concepts: startup.ready ? getStarterLensConcepts(9) : [],
+      all_concepts: startup.ready ? getOntologyConceptRows(undefined, 500) : [],
       emerged: startup.ready ? getEmergedEntities(8) : [],
     });
   });

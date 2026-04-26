@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ConceptTile } from '../ConceptTile';
 import { useDossier } from '../DossierContext';
 import { BRANCH_COLORS } from '@/lib/ui/semantic';
@@ -60,12 +60,14 @@ interface HubData {
   meta: Meta;
   stats: Stats;
   concepts: Concept[];
+  all_concepts?: Concept[];
   emerged: Emerged[];
 }
 
 export function HubPanel() {
   const { openConcept, branches, openBranch } = useDossier();
   const [data, setData] = useState<HubData | null>(null);
+  const [showAllConcepts, setShowAllConcepts] = useState(false);
 
   useEffect(() => {
     fetch('/api/hub')
@@ -73,8 +75,12 @@ export function HubPanel() {
       .then(setData);
   }, []);
 
-  const top = data?.concepts.slice(0, 3) ?? [];
-  const next = data?.concepts.slice(3, 9) ?? [];
+  const starterConcepts = data?.concepts ?? [];
+  const allConcepts = data?.all_concepts ?? starterConcepts;
+  const visibleConcepts = showAllConcepts ? allConcepts : starterConcepts;
+  const top = visibleConcepts.slice(0, 3);
+  const next = visibleConcepts.slice(3);
+  const hiddenConceptCount = Math.max(0, allConcepts.length - starterConcepts.length);
   const blocked = data?.startup ? !data.startup.ready : false;
 
   return (
@@ -134,14 +140,56 @@ export function HubPanel() {
               lineHeight: 1.6,
             }}
           >
-            Bird Brain has not accepted a startup ontology overview yet. Use the start screen to
-            build or rebuild the overview before relying on hub concepts.
+            Bird Brain has not built a project map yet. Use the start screen to build or rebuild it
+            before relying on hub concepts.
           </div>
         )}
 
         {top.length > 0 && !blocked && (
           <>
-            <SectionHeader title="STARTER LENSES" />
+            <SectionHeader
+              title={showAllConcepts ? 'ALL CONCEPTS' : 'STARTER LENSES'}
+              action={
+                hiddenConceptCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllConcepts((value) => !value)}
+                    style={{
+                      background: showAllConcepts ? 'rgba(0, 214, 143, 0.08)' : 'transparent',
+                      border: '1px solid var(--border)',
+                      color: showAllConcepts ? 'var(--accent)' : 'var(--text-dim)',
+                      cursor: 'pointer',
+                      fontSize: '0.58rem',
+                      letterSpacing: '0.14em',
+                      textTransform: 'uppercase',
+                      fontWeight: 700,
+                      padding: '5px 9px',
+                    }}
+                    title={
+                      showAllConcepts
+                        ? 'Return to the curated starter lenses.'
+                        : `Show ${hiddenConceptCount} additional ranked concepts.`
+                    }
+                  >
+                    {showAllConcepts ? 'show starters' : `show all ${allConcepts.length}`}
+                  </button>
+                ) : null
+              }
+            />
+            <p
+              style={{
+                fontSize: '0.68rem',
+                color: '#555',
+                margin: '-4px 0 12px',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+              }}
+            >
+              {showAllConcepts
+                ? `Showing all ${allConcepts.length} concepts, ranked by grounding.`
+                : `Showing ${starterConcepts.length} starter lenses out of ${allConcepts.length} concepts.`}
+            </p>
             <div
               style={{
                 display: 'grid',
@@ -151,7 +199,12 @@ export function HubPanel() {
               }}
             >
               {top.map((c) => (
-                <ConceptTile key={c.slug} {...c} summary={c.lens_description ?? c.summary} size="lg" />
+                <ConceptTile
+                  key={c.slug}
+                  {...c}
+                  summary={showAllConcepts ? c.summary : c.lens_description ?? c.summary}
+                  size="lg"
+                />
               ))}
             </div>
             <div
@@ -163,7 +216,12 @@ export function HubPanel() {
               }}
             >
               {next.map((c) => (
-                <ConceptTile key={c.slug} {...c} summary={c.lens_description ?? c.summary} size="md" />
+                <ConceptTile
+                  key={c.slug}
+                  {...c}
+                  summary={showAllConcepts ? c.summary : c.lens_description ?? c.summary}
+                  size="md"
+                />
               ))}
             </div>
           </>
@@ -174,7 +232,7 @@ export function HubPanel() {
             <SectionHeader title="EMERGED FROM EXPLORATION" accent="#e74c9b" />
             <p style={{ fontSize: '0.7rem', color: '#666', margin: '0 0 12px', maxWidth: 560, lineHeight: 1.55 }}>
               Concepts you surfaced by clicking phrases inside other dossiers. Each one is a new
-              lens the app hadn't seen in the corpus until you named it.
+              lens Bird Brain had not turned into a topic until you named it.
             </p>
             <div
               style={{
@@ -201,7 +259,7 @@ export function HubPanel() {
                     {e.name}
                   </div>
                   <div style={{ fontSize: '0.62rem', color: '#666', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                    {e.has_synthesis ? 'synthesized' : 'pending'}
+                    {e.has_synthesis ? 'ready' : 'pending'}
                     {e.emerged_from ? ` · from ${e.emerged_from}` : ''}
                   </div>
                 </button>
@@ -286,7 +344,15 @@ function StatTile({
   );
 }
 
-function SectionHeader({ title, accent = '#888' }: { title: string; accent?: string }) {
+function SectionHeader({
+  title,
+  accent = '#888',
+  action,
+}: {
+  title: string;
+  accent?: string;
+  action?: ReactNode;
+}) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
       <span
@@ -301,6 +367,7 @@ function SectionHeader({ title, accent = '#888' }: { title: string; accent?: str
         {title}
       </span>
       <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+      {action}
     </div>
   );
 }

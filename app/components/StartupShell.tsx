@@ -46,30 +46,32 @@ interface StartupStatusPayload {
 const MODE_COPY: Record<StartupMode, { title: string; description: string }> = {
   'automatic-cached': {
     title: 'Automatic cached',
-    description: 'Use the last ontology if the corpus is unchanged. Rebuild automatically after ingest or when missing.',
+    description: 'Use the last project map if the files are unchanged. Rebuild automatically after ingest or when missing.',
   },
   'always-fresh': {
     title: 'Always fresh',
-    description: 'Run a new ontology overview every time you begin again, even if the corpus has not changed.',
+    description: 'Build a fresh project map and clear cached briefs/dossiers, even if the files have not changed.',
   },
   manual: {
     title: 'Manual rebuild',
-    description: 'Only rebuild the ontology when you explicitly click the rebuild button.',
+    description: 'Only rebuild the project map when you explicitly click the rebuild button.',
   },
 };
 
 export function StartupShell({
   onEnter,
+  initialMode = 'automatic-cached',
   workspaceName,
   onSwitchWorkspace,
 }: {
   onEnter: () => void;
+  initialMode?: StartupMode;
   workspaceName?: string;
   onSwitchWorkspace?: () => void;
 }) {
   const { resetSession } = useDossier();
   const workspace = useWorkspace();
-  const [mode, setMode] = useState<StartupMode>('automatic-cached');
+  const [mode, setMode] = useState<StartupMode>(initialMode);
   const [status, setStatus] = useState<StartupStatusPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -120,6 +122,7 @@ export function StartupShell({
   );
 
   useEffect(() => {
+    setMode(initialMode);
     const ac = new AbortController();
     setBootstrapping(true);
     setStatus(null);
@@ -131,7 +134,7 @@ export function StartupShell({
       }
     })();
     return () => ac.abort();
-  }, [workspace.id, fetchStartupStatus]);
+  }, [workspace.id, fetchStartupStatus, initialMode]);
 
   const canEnter = Boolean(status?.status?.ready);
   const blocked = Boolean(status && status.status && !status.status.ready);
@@ -141,7 +144,7 @@ export function StartupShell({
     return fetchStartupStatus();
   }
 
-  async function runCorpusIngest(includeCode = false) {
+  async function runCorpusIngest(includeCode = true) {
     setIngesting(true);
     setMessage('');
     setRebuildSteps([]);
@@ -159,7 +162,7 @@ export function StartupShell({
         stats?: { total: number; added: number; updated: number };
       };
       if (!res.ok) {
-        setMessage(json.error || 'Corpus ingest failed.');
+        setMessage(json.error || 'Folder scan failed.');
         return;
       }
       const st = json.stats;
@@ -172,11 +175,11 @@ export function StartupShell({
           );
         }
       } else {
-        setMessage('Corpus ingest finished.');
+        setMessage('Folder scan finished.');
       }
       await refreshStatus();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Corpus ingest failed.');
+      setMessage(err instanceof Error ? err.message : 'Folder scan failed.');
     } finally {
       setIngesting(false);
     }
@@ -202,9 +205,9 @@ export function StartupShell({
       if (next.status.ready) {
         onEnter();
       } else if (mode === 'manual') {
-        setMessage('Ontology is not ready yet. Rebuild it before entering Bird Brain.');
+        setMessage('Project map is not ready yet. Rebuild it before entering Bird Brain.');
       } else {
-        setMessage('Bird Brain could not enter because the ontology overview is still unavailable.');
+        setMessage('Bird Brain could not enter because the project map is still unavailable.');
       }
     } finally {
       setBusy(false);
@@ -227,7 +230,7 @@ export function StartupShell({
     };
     const next = await refreshStatus();
     if (!res.ok) {
-      const parts = [json.error || 'Ontology rebuild failed.'];
+      const parts = [json.error || 'Project map rebuild failed.'];
       if (json.hint?.trim()) parts.push(json.hint.trim());
       setMessage(parts.join(' '));
       setRebuildSteps(Array.isArray(json.steps) ? json.steps.filter((s) => typeof s === 'string' && s.trim()) : []);
@@ -240,11 +243,11 @@ export function StartupShell({
     if (bootstrapping && !statusFetchError) return 'loading startup state';
     if (statusFetchError) return 'startup status unavailable';
     if (!status?.status) return 'startup state unknown';
-    if (status.status.running) return 'ontology running';
-    if (status.status.ready) return 'ontology ready';
-    if (status.status.failed) return 'ontology failed';
-    if (status.status.stale) return 'ontology stale';
-    if (status.status.missing) return 'ontology missing';
+    if (status.status.running) return 'project map running';
+    if (status.status.ready) return 'project map ready';
+    if (status.status.failed) return 'project map failed';
+    if (status.status.stale) return 'project map stale';
+    if (status.status.missing) return 'project map missing';
     return 'startup pending';
   }, [status, statusFetchError, bootstrapping]);
 
@@ -263,13 +266,13 @@ export function StartupShell({
     const chunks = stats?.total_chunks ?? 0;
     if (!stats && !sig) return null;
     if (!sig && n === 0) {
-      return 'Run re-ingest corpus so Bird Brain scans your folder and writes documents into the local database.';
+      return 'Run re-scan folder so Bird Brain scans your folder and writes documents into the local database.';
     }
     if (!sig && n > 0) {
-      return `${n} document(s) in the database, but corpus metadata is missing — run re-ingest once to repair.`;
+      return `${n} document(s) in the database, but folder metadata is missing — run re-scan once to repair.`;
     }
     if (sig && n === 0) {
-      return 'Corpus metadata exists but the document index is empty — run re-ingest corpus.';
+      return 'Folder metadata exists but the document index is empty — run re-scan folder.';
     }
     const last = stats?.last_ingested;
     const lastBit =
@@ -341,7 +344,7 @@ export function StartupShell({
           again
         </h1>
         <p className="metro-lead" style={{ marginTop: space.lg, maxWidth: 620 }}>
-          Bird Brain starts by building an ontology overview of the project. That overview serves
+          Bird Brain starts by building a project map from the folder. That map serves
           three jobs at once: it briefs active builders, explains the project to newcomers, and
           demonstrates the product pattern as a reusable project-intelligence console.
         </p>
@@ -438,13 +441,13 @@ export function StartupShell({
         </div>
         <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: space.lg }}>
           {bootstrapping
-            ? 'Connecting to this workspace’s database and checking the last ontology run…'
+            ? 'Connecting to this workspace’s database and checking the last project map…'
             : summary ||
               'Bird Brain hasn’t built an overview of this folder yet. Click build overview to run it.'}
         </div>
         {status?.status?.latest_run?.error_text && (
           <div style={{ fontSize: 14, color: '#e74c9b', lineHeight: 1.6, marginBottom: space.lg }}>
-            Last ontology error: {status.status.latest_run.error_text}
+            Last project-map error: {status.status.latest_run.error_text}
           </div>
         )}
 
@@ -462,9 +465,9 @@ export function StartupShell({
             </div>
           ) : (
             <>
-              <ChecklistRow label="Corpus ingested" ok={corpusIngestedOk} />
-              <ChecklistRow label="Ontology ready" ok={Boolean(status.status.ready)} />
-              <ChecklistRow label="Ontology stale" ok={Boolean(status.status.stale)} invert />
+              <ChecklistRow label="Folder scanned" ok={corpusIngestedOk} />
+              <ChecklistRow label="Project map ready" ok={Boolean(status.status.ready)} />
+              <ChecklistRow label="Project map stale" ok={Boolean(status.status.stale)} invert />
               <ChecklistRow label="Last run failed" ok={!status.status.failed} />
               {corpusDetail && (
                 <div
@@ -509,7 +512,7 @@ export function StartupShell({
             type="button"
             onClick={() => void runCorpusIngest(false)}
             disabled={busy || ingesting || bootstrapping}
-            title="Scan the project folder again and refresh corpus stats. Required before the first overview if you skipped ingest when opening."
+            title="Scan the project folder again and refresh file stats. Required before the first overview if you skipped scanning when opening."
             style={{
               background: 'transparent',
               color: 'var(--text)',
@@ -524,7 +527,7 @@ export function StartupShell({
               fontFamily: metroFont,
             }}
           >
-            {ingesting ? 'ingesting…' : 're-ingest corpus'}
+            {ingesting ? 'scanning…' : 're-scan folder'}
           </button>
           {canEnter && (
             <button
@@ -633,7 +636,7 @@ function StartupInlineSpinner() {
 function StartupChecksLoading() {
   return (
     <div style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.55 }}>
-      Reading the workspace database: document counts, corpus signature, and the latest ontology run.
+      Reading the workspace database: document counts, folder fingerprint, and the latest project map.
     </div>
   );
 }

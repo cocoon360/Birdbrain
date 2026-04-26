@@ -127,14 +127,14 @@ export function buildMatchQuery(query: string): string {
 
   if (!cleaned) return '';
 
-  const quoted = cleaned.includes('"') ? cleaned : `"${cleaned}"`;
-  const tokenized = cleaned
-    .split(' ')
-    .filter(Boolean)
+  const phrase = cleaned.replace(/"/g, ' ').replace(/\s+/g, ' ').trim();
+  const quoted = phrase ? `"${phrase}"` : '';
+  const tokenized = Array.from(new Set(phrase.match(/[A-Za-z0-9_]+/g) ?? []))
+    .filter((token) => token.length >= 2)
     .map((token) => `${token}*`)
     .join(' OR ');
 
-  return `${quoted} OR ${tokenized}`;
+  return [quoted, tokenized].filter(Boolean).join(' OR ');
 }
 
 function statusPrioritySql(): string {
@@ -147,6 +147,30 @@ function statusPrioritySql(): string {
       WHEN 'brainstorm' THEN 4
       WHEN 'archive' THEN 5
       ELSE 6
+    END
+  `;
+}
+
+function currentTruthSignalSql(): string {
+  return `
+    CASE
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%current direction%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%current role%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%current answer%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%current working%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%current active notes%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%old docs%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%old version%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%no longer%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%scrapped%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%removed%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%replaced%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%superseded%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%single pov%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%single playable%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%oliver-only%' THEN 0
+      WHEN lower(coalesce(c.heading, '') || ' ' || c.body) LIKE '%oliver only%' THEN 0
+      ELSE 1
     END
   `;
 }
@@ -296,7 +320,7 @@ export function getEntityMentions(slug: string, limit = 18): EntityEvidenceRow[]
       JOIN documents d ON d.id = em.document_id
       JOIN chunks c ON c.id = em.chunk_id
       WHERE e.slug = ?
-      ORDER BY ${statusPrioritySql()} ASC, em.match_count DESC, d.file_mtime DESC
+      ORDER BY ${currentTruthSignalSql()} ASC, ${statusPrioritySql()} ASC, em.match_count DESC, d.file_mtime DESC
       LIMIT ?
     `
     )
@@ -717,6 +741,22 @@ export function clearStaleGeneratedArtifacts(input: {
       `INSERT INTO project_meta (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`
     ).run(markerKey, currentCorpusSignature);
+  })();
+  return true;
+}
+
+export function clearGeneratedArtifacts(markerValue?: string) {
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare(`DELETE FROM concept_precontext_cache`).run();
+    db.prepare(`DELETE FROM concept_synthesis_cache`).run();
+    db.prepare(`DELETE FROM synthesis_queue`).run();
+    if (markerValue) {
+      db.prepare(
+        `INSERT INTO project_meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+      ).run('artifact_cleanup_signature', markerValue);
+    }
   })();
   return true;
 }

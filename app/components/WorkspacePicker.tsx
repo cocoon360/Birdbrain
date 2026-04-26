@@ -37,7 +37,7 @@ const INCLUDE_CODE_LS = 'birdbrain:include-code';
 const OPEN_MODE_COPY: Record<OpenMode, { title: string; description: string }> = {
   'last-opened': {
     title: 'Pick up where you left off',
-    description: 'Open the most recent workspace with its cached ontology. Fastest way to resume.',
+    description: 'Open the most recent workspace with its saved project map. Fastest way to resume.',
   },
   'fresh-ingest': {
     title: 'Re-ingest and rebuild',
@@ -45,7 +45,7 @@ const OPEN_MODE_COPY: Record<OpenMode, { title: string; description: string }> =
   },
   'pick-folder': {
     title: 'Begin a new project',
-    description: 'Add a brand-new folder as a workspace and build its ontology from scratch.',
+    description: 'Add a brand-new folder as a workspace and build its project map from scratch.',
   },
 };
 
@@ -64,7 +64,7 @@ export function WorkspacePicker({
   const [openMode, setOpenMode] = useState<OpenMode>('last-opened');
   const [browserOpen, setBrowserOpen] = useState(false);
   const [phase, setPhase] = useState<IngestPhase>({ kind: 'idle' });
-  const [includeCode, setIncludeCode] = useState(false);
+  const [includeCode, setIncludeCode] = useState(true);
 
   useEffect(() => {
     setHasNative(isTauri());
@@ -560,9 +560,9 @@ export function WorkspacePicker({
 
         {sorted.length === 0 ? (
           <div style={{ fontSize: '0.82rem', color: '#777', lineHeight: 1.7, maxWidth: 460 }}>
-            Pick "begin a new project" on the left and point at a folder of readable documents
-            (markdown, text, HTML, or SVG). Bird Brain will register it, ingest every file inside,
-            and drop you into the ontology startup screen.
+            Pick "begin a new project" on the left and point at a folder of readable files. Bird
+            Brain will register it, ingest the text it can understand, and drop you into the project-map
+            startup screen.
           </div>
         ) : (
           <div
@@ -742,7 +742,7 @@ function IngestProgressModal({
         <div style={{ fontSize: '1.35rem', fontWeight: 300, lineHeight: 1.25, marginBottom: 14 }}>
           {phase.kind === 'registering' && 'Creating the workspace database…'}
           {phase.kind === 'ingesting' &&
-            'Walking the folder for markdown, text, HTML, SVG, and optionally source code.'}
+            'Walking the folder for readable text, documents, HTML, SVG, and source code.'}
           {phase.kind === 'empty' && 'This folder has no readable text files under it.'}
           {phase.kind === 'error' && phase.message}
         </div>
@@ -774,21 +774,9 @@ function IngestProgressModal({
               marginBottom: 14,
             }}
           >
-            Bird Brain reads markdown (<code style={{ color: '#e7b24c' }}>.md</code>), plain text
-            (<code style={{ color: '#e7b24c' }}>.txt</code>, <code style={{ color: '#e7b24c' }}>.rst</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.org</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.adoc</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.json</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.yaml</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.csv</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.log</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.toml</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.ini</code>), HTML (
-            <code style={{ color: '#e7b24c' }}>.html</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.htm</code>,{' '}
-            <code style={{ color: '#e7b24c' }}>.xml</code>), and{' '}
-            <code style={{ color: '#e7b24c' }}>.svg</code>. You can still open the workspace with
-            its empty database, or cancel and point at a folder that has any of those inside.
+            Bird Brain reads Markdown, plain text, structured text like JSON/YAML/CSV/logs, HTML/XML,
+            SVG, and source code. You can still open the workspace with its empty
+            database, or cancel and point at a folder that has readable files inside.
           </div>
         )}
 
@@ -867,7 +855,7 @@ function IngestSpinnerRow() {
         }}
       />
       <div style={{ fontSize: '0.76rem', color: '#8fb6c3' }}>
-        Parsing markdown, chunking by heading, writing to SQLite.
+        Parsing readable files, chunking text, writing to SQLite.
       </div>
       <style>{`@keyframes bb-spin { to { transform: rotate(360deg); } }`}</style>
     </div>

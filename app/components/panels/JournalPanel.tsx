@@ -251,7 +251,7 @@ function StatusStrip({
               fontWeight: 700,
             }}
           >
-            {mode}
+            {mode === 'live' ? 'legacy' : 'queued'}
           </button>
         ))}
       </div>

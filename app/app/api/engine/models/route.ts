@@ -38,7 +38,7 @@ const CURATED_GROUPS: ModelGroup[] = [
   },
   {
     name: 'OpenAI (GPT)',
-    ids: ['gpt-5.4-high', 'gpt-5.4-medium', 'gpt-5.4-mini-medium'],
+    ids: ['gpt-5.5-medium', 'gpt-5.4-high', 'gpt-5.4-medium', 'gpt-5.4-mini-medium'],
   },
   {
     name: 'Google (Gemini)',

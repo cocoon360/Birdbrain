@@ -339,7 +339,7 @@ export function FolderBrowserDialog({
                   maxWidth: 520,
                 }}
               >
-                Tell the ontology pass what this folder is. One paragraph is enough — what the
+                Tell Bird Brain what this folder is. One paragraph is enough — what the
                 project is, what kinds of concepts matter, what to ignore. The more specific the
                 lens, the better the dossiers.
               </div>

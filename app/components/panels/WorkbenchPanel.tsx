@@ -64,7 +64,7 @@ function buildExamples(concepts: Concept[]): string[] {
     const bucket = byType.get(type)!;
     if (bucket.length >= 2) examples.push(`List all ${type}s.`);
     if (examples.length >= 4) break;
-    if (bucket[0]) examples.push(`What does the corpus say about ${bucket[0].name}?`);
+    if (bucket[0]) examples.push(`What do the files say about ${bucket[0].name}?`);
     if (examples.length >= 4) break;
   }
   return examples.slice(0, 4);
@@ -157,20 +157,20 @@ export function WorkbenchPanel() {
     <div className="metro-panel thin-scrollbar" style={{ height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
       <div style={{ marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
-          retrieval + synthesis
+          search + answers
         </div>
         <h1 className="metro-title">workbench</h1>
         <p className="metro-lead">
-          Use the top bar for full-text retrieval over ingested files and the second bar for
-          Bird Brain questions. Search stays deterministic; asking pulls evidence first, then
-          synthesizes or returns a grounded fallback.
+          Use the top bar to search the files and the second bar to ask Bird Brain questions.
+          Search stays predictable; asking pulls evidence first, then writes an answer or returns
+          a grounded fallback.
         </p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
         <div className="metro-surface" style={{ padding: '14px 16px' }}>
           <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
-            search-style retrieval
+            file search
           </div>
           <input
             className="metro-input"
@@ -207,7 +207,7 @@ export function WorkbenchPanel() {
 
         <div className="metro-surface" style={{ padding: '14px 16px' }}>
           <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
-            question / synthesis
+            question / answer
           </div>
           <div
             style={{

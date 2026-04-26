@@ -30,7 +30,7 @@ function buildExamples(concepts: Concept[]): string[] {
     const bucket = byType.get(type)!;
     if (bucket.length >= 2) examples.push(`List all ${type}s.`);
     if (examples.length >= 4) break;
-    if (bucket[0]) examples.push(`What does the corpus say about ${bucket[0].name}?`);
+    if (bucket[0]) examples.push(`What do the files say about ${bucket[0].name}?`);
     if (examples.length >= 4) break;
   }
   return examples.slice(0, 4);
