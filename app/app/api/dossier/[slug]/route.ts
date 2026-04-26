@@ -15,6 +15,7 @@ import {
   synthesizeForSlug,
   type DossierSynthesisVariant,
 } from '@/lib/ai/synthesize';
+import { findPossibleEvidenceConflicts } from '@/lib/ai/evidence-conflicts';
 import { CursorAgentError } from '@/lib/ai/cursor-agent';
 import { EngineError } from '@/lib/engine';
 import { withWorkspaceRoute } from '@/lib/workspaces/route';
@@ -29,7 +30,7 @@ export async function GET(
   return withWorkspaceRoute(req, async () => {
     const { slug } = await context.params;
     const search = req.nextUrl.searchParams;
-    const profile = search.get('mode') === 'queued' ? 'queued' : 'live';
+    const profile = search.get('mode') === 'live' ? 'live' : 'queued';
     const forkSpanify = search.get('fork') === 'spanify' && profile === 'live';
     const synthesisVariant: DossierSynthesisVariant = forkSpanify
       ? 'spanify_precontext'
@@ -38,10 +39,28 @@ export async function GET(
     const fromSlug = search.get('from');
     const rootSlug = search.get('root');
     const startup = getStartupStatus();
+    const concept = getEntityBySlug(slug);
+    if (!concept) return NextResponse.json({ error: 'Concept not found' }, { status: 404 });
+
+    const related = getRelatedEntities(slug, 10);
+    const evidence = getEntityMentions(slug, 6);
+    const conflictEvidence = getEntityMentions(slug, 12);
+    const possible_conflicts = findPossibleEvidenceConflicts(conflictEvidence);
+    const precontext = getPrecontextForSlug(slug);
+
     if (!startup.ready) {
       return NextResponse.json(
         {
           blocked: true,
+          concept,
+          precontext,
+          pending: false,
+          profile,
+          synthesis_variant: synthesisVariant,
+          paragraph: null,
+          evidence,
+          related,
+          possible_conflicts,
           error: {
             code: 'ontology-not-ready',
             message:
@@ -51,12 +70,6 @@ export async function GET(
         { status: 409 }
       );
     }
-    const concept = getEntityBySlug(slug);
-    if (!concept) return NextResponse.json({ error: 'Concept not found' }, { status: 404 });
-
-    const related = getRelatedEntities(slug, 10);
-    const evidence = getEntityMentions(slug, 6);
-    const precontext = getPrecontextForSlug(slug);
 
     const cached = getSynthesisForSlug(slug, cacheProfile);
     if (cached) {
@@ -72,6 +85,7 @@ export async function GET(
         model: cached.model,
         evidence,
         related,
+        possible_conflicts,
       });
     }
 
@@ -93,6 +107,7 @@ export async function GET(
         error: null,
         evidence,
         related,
+        possible_conflicts,
       });
     }
 
@@ -115,6 +130,7 @@ export async function GET(
         model: fresh.model,
         evidence,
         related,
+        possible_conflicts,
       });
     } catch (err) {
       const { code, message } = describeError(err);
@@ -129,6 +145,7 @@ export async function GET(
         error: { code, message },
         evidence,
         related,
+        possible_conflicts,
       });
     }
   });
@@ -161,25 +178,11 @@ export async function POST(
     }
 
     const startup = getStartupStatus();
-    if (!startup.ready) {
-      return NextResponse.json(
-        {
-          blocked: true,
-          error: {
-            code: 'ontology-not-ready',
-            message:
-              'Startup ontology overview is not ready yet. Begin or rebuild from the start screen first.',
-          },
-        },
-        { status: 409 }
-      );
-    }
-
     const concept = getEntityBySlug(slug);
     if (!concept) return NextResponse.json({ error: 'Concept not found' }, { status: 404 });
 
     const profile =
-      body.profile === 'queued' || body.mode === 'queued' ? ('queued' as const) : ('live' as const);
+      body.profile === 'live' || body.mode === 'live' ? ('live' as const) : ('queued' as const);
     const fromSlug = body.from ?? null;
     const rootSlug = body.root ?? null;
     const forkSpanify = body.fork === 'spanify' && profile === 'live';
@@ -189,6 +192,30 @@ export async function POST(
 
     const related = getRelatedEntities(slug, 10);
     const evidence = getEntityMentions(slug, 6);
+    const conflictEvidence = getEntityMentions(slug, 12);
+    const possible_conflicts = findPossibleEvidenceConflicts(conflictEvidence);
+
+    if (!startup.ready) {
+      return NextResponse.json(
+        {
+          blocked: true,
+          concept,
+          precontext: getPrecontextForSlug(slug),
+          pending: false,
+          profile,
+          paragraph: null,
+          evidence,
+          related,
+          possible_conflicts,
+          error: {
+            code: 'ontology-not-ready',
+            message:
+              'Startup ontology overview is not ready yet. Begin or rebuild from the start screen first.',
+          },
+        },
+        { status: 409 }
+      );
+    }
 
     if (forkSpanify) {
       deleteSynthesisCacheForSlug(slug, 'live_spanify');
@@ -214,6 +241,7 @@ export async function POST(
         error: null,
         evidence,
         related,
+        possible_conflicts,
       });
     }
 
@@ -236,6 +264,7 @@ export async function POST(
         model: fresh.model,
         evidence,
         related,
+        possible_conflicts,
       });
     } catch (err) {
       const { code, message } = describeError(err);
@@ -250,6 +279,7 @@ export async function POST(
         error: { code, message },
         evidence,
         related,
+        possible_conflicts,
       });
     }
   });

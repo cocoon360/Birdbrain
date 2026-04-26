@@ -29,7 +29,7 @@ something easy for me and my collaborators to work with. **But it's
 pointing the tool at a project I'm just beginning to learn about when
 the tool is at its best.**
 
-***
+---
 
 ## The interaction model
 
@@ -38,74 +38,85 @@ option opens up new things to investigate, and picking *those new options* shift
 state of the scene, affecting how players see the game world in an increasingly personalized lense as the story unfolds. 
 **Bird Brain turns folders of text and code files into a generative hypertext concept map for active work and research synthesis instead of the traditional linear LLM conversation path.**
 
-| In a dialogue-tree game                  | In Bird Brain                                                |
-| ---------------------------------------- | ------------------------------------------------------------ |
-| Opening a scene                          | Opening a project folder                                     |
-| Initial dialogue options                 | The starter concept map, derived from the folder itself      |
-| Picking a branch → new dialogue reveals  | Clicking a concept → a short generated page + new links      |
-| "Investigate" points in the environment  | Clickable phrases inside the generated page                  |
-| A choice permanently shifts the scene    | What you click on becomes part of the map                    |
-| The in-game journal                      | The Journal panel - a running paragraph of what you're doing |
+
+| In a dialogue-tree game                 | In Bird Brain                                                |
+| --------------------------------------- | ------------------------------------------------------------ |
+| Opening a scene                         | Opening a project folder                                     |
+| Initial dialogue options                | The starter concept map, derived from the folder itself      |
+| Picking a branch → new dialogue reveals | Clicking a concept → a short generated page + new links      |
+| "Investigate" points in the environment | Clickable phrases inside the generated page                  |
+| A choice permanently shifts the scene   | What you click on becomes part of the map                    |
+| The in-game journal                     | The Journal panel - a running paragraph of what you're doing |
+
 
 ### Umwelten for archives: a perceptual framing
 
 Bird Brain is designed to help you experience project files through a fresh lense. Instead of presenting a static summary, it adapts and reorganizes what you see based on the pathways you follow and the concepts you engage with. The map it builds isn’t hardcoded: it emerges entirely from your ongoing interactions with the material. As you explore and click through ideas, your personal journey shapes a unique perspective, one that grows more relevant and meaningful the more you use it. Over time, the archive isn't just organized; it becomes a living reflection of your attention and curiosity and relationship to the project.
 
-***
+---
 
 ## What ships today
 
 Everything below runs locally against the current branch.
 
 - **No hardcoded concepts.** Point Bird Brain at a folder and it derives
-  its own starter concept list from filenames, headings, and proper
-  nouns. No per-project config, nothing baked into the engine.
+its own starter concept list from filenames, headings, and proper
+nouns. No per-project config, nothing baked into the engine.
 - **Generated pages as hypertext.** Click a concept and the engine
-  writes a short paragraph about it. Every phrase in that page is either a
-  link to a known concept, or a *candidate* the engine thinks deserves
-  one of its own. Click a candidate and it becomes a real concept,
-  joins the map, and gets its own page.
+writes a short paragraph about it. Every phrase in that page is either a
+link to a known concept, or a *candidate* the engine thinks deserves
+one of its own. Click a candidate and it becomes a real concept,
+joins the map, and gets its own page.
 - **The map grows from attention.** Every click is logged. A running
-  paragraph in the Journal panel reads those clicks back to you in
-  plain prose — *"you keep circling X, Y, and the tension between
-  them"* — and new concepts get promoted from whatever you keep
-  hovering around.
+paragraph in the Journal panel reads those clicks back to you in
+plain prose — *"you keep circling X, Y, and the tension between
+them"* — and new concepts get promoted from whatever you keep
+hovering around.
 - **Grounded in your files, not the model's memory.** Each page cites
-  the actual documents it pulled from. A Sources strip sits under every
-  page, with full evidence cards one click away, each of which opens
-  the source file.
-- **Two-stage generation.** Before writing the long page, the engine
-  writes a short bird's-eye summary of what the concept is *inside this
-  project*, then uses that as the spine for the real page. Cached per
-  concept and thrown out when the files change.
+the actual documents it pulled from. A Sources strip sits under every
+page, with full evidence cards one click away, each of which opens
+the source file.
+- **Two-stage generation.** Before writing the dossier, the engine writes
+a short bird's-eye **brief** of what the concept is *inside this project*,
+then uses that as the spine for the dossier. Cached per concept and
+thrown out when the files change.
 - **Swappable engine.** Cursor Agent CLI is the default; OpenAI,
-  Anthropic, and Ollama adapters are wired in. A settings drawer lets
-  you pick provider and model without leaving the app, with a curated
-  shortlist of newest-per-provider plus a "show all" toggle.
+Anthropic, and Ollama adapters are wired in. A settings drawer lets
+you pick provider and model without leaving the app, with a curated
+shortlist of newest-per-provider plus a "show all" toggle.
 - **Desktop app.** A Tauri wrapper ships as a native macOS build. The
-  web version is still fine for dev work, but the desktop app is the
-  shape it's easiest to be used in.
-- **Export.** Any generated page → Markdown, preserving hypertext links
-  as stable references you can paste elsewhere.
+web version is still fine for dev work, but the desktop app is the
+shape it's easiest to be used in.
+- **Export.** Copy the generated dossier **paragraph** as plain text to clipboard.
+- **Possible evidence conflicts (v1).** Sometimes two passages about the same
+concept *sound* like they’re saying opposite things (for example, one file
+talks about a single point of view and another about dual POV, or one says
+one playable character and another says two). Bird Brain can flag a few of
+those pairs as “maybe look at this”—shown as a **Possible conflicts** line
+on the dossier. It’s pattern-matching on wording, not “understanding” your
+project, and it may miss real problems or show false alarms. It only
+reports a handful of cases. Treat it as a
+nudge, not a verdict.
 
 ## What is still partial
 
 Honest list of things I haven't nailed yet:
 
 - **Bridging text between pages.** When you navigate from concept A to
-  concept B, B's page uses A as quiet context but doesn't *write the
-  bridge*. The "here's how this follows from what you just read"
-  feeling is still implicit.
+concept B, B's page uses A as quiet context but doesn't *write the
+bridge*. The "here's how this follows from what you just read"
+feeling is still implicit.
 - **No drift indicators.** Rising/fading markers over the concept map
-  were cut as too noisy; may return once the click signal is richer.
+were cut as too noisy; may return once the click signal is richer.
 - **Journal voice.** The "what you're circling" paragraph reads fine
-  but is still more log than journal; a copy pass wouldn't hurt.
-- **Copied-to-clipboard feedback.** When you export a generated hypertext page to Markdown, there's no visible signal yet that the text has been copied to your clipboard - some kind of confirmation/tell is still needed.
+but is still more log than journal; a copy pass wouldn't hurt.
 - **Workbench tab.** Still evaluating whether the Workbench tab meaningfully improves the user experience or just adds complexity. It may be streamlined or removed entirely if it proves unneeded.
-- **Conflict detection.** Bird Brain does not yet flag conflicts across sources. In the future, it should automatically detect when your files contain contradictory information about the same concept, highlight those disagreements, and surface them so you can track or resolve inconsistencies in your project’s knowledge base.
+- **Deeper conflict detection.** Beyond the narrow v1 regex rules, there is
+no general analysis that arbitrary facts, dates, or claims across files
+contradict each other.
 - **Clear loading & processing stages.** The app's feedback for ingest, indexing, and page generation is still too minimal. Making the stages and background processing more visible is an area for improvement, so users always know what has finished processing and what is still in progress, instead of being left guessing.
 
-***
+---
 
 ## Quick start
 
@@ -116,7 +127,7 @@ npm install
 npm run dev        # http://localhost:3000 —> pick a workspace folder in the UI
 
 # Optional CLI ingest (defaults to the tiny tracked fixtures/smoke-corpus/):
-# DOCS_PATH=/absolute/path/to/your/markdown npm run ingest
+# DOCS_PATH=/absolute/path/to/your/project/folder npm run ingest
 ```
 
 For live page generation, install the Cursor Agent CLI and run
@@ -124,9 +135,9 @@ For live page generation, install the Cursor Agent CLI and run
 background queue works the same way once you wire an adapter under
 `app/lib/engine/`.
 
-Desktop (Tauri) build: [`RUNNING_THE_PROTOTYPE.md`](RUNNING_THE_PROTOTYPE.md).
+Desktop (Tauri) build: `[RUNNING_THE_PROTOTYPE.md](RUNNING_THE_PROTOTYPE.md)`.
 
-***
+---
 
 ## How it works (the short version)
 
@@ -149,9 +160,58 @@ flowchart TD
     style H fill:#f4e8ee,stroke:#996a81,color:#2a2a2a
 ```
 
+
+
 **The short read:** a folder goes in, a living map of concepts comes out.
 The map grows from what you click. The pages are generated on demand
 from the actual files, not from the model's general knowledge.
+
+### Under the hood: brief → evidence → dossier
+
+Your project folder is only **read**; app state (SQLite, registry) lives in
+`data/`, not inside the source tree. When you open a concept, the engine
+builds a **brief** (stable short answer for that topic), pulls **evidence**
+from search, then writes a **dossier** that deepens the brief. The model’s
+output is **checked** so the paragraph still starts on the concept you asked
+for; if it drifts, Bird Brain retries once, then falls back to the brief
+instead of saving a wrong-topic wall of text. Optional **"lite" briefing**
+reuses the same brief as lightweight hypertext without rewriting it. This is
+the "lite" mode that is currently hidden behind the "live" mode idea.
+
+```mermaid
+flowchart TB
+  folder["Project folder, read-only from Bird Brain's perspective"]
+  ingest["Ingest readable files and code"]
+  projectMap["AI project map + starter topics"]
+  concept["User opens concept"]
+  brief["Brief for this topic"]
+  evidence["SQL evidence retrieval with safe FTS"]
+  dossier["Slightly expanded dossier"]
+  verify["Subject check: starts with target concept"]
+  retry["Retry if off-target"]
+  fallback["Brief fallback if still off-target"]
+  cache["Cache only verified/fallback dossier"]
+  ui["Display main dossier"]
+  linked["Optional "lite" briefing"]
+
+  folder --> ingeståå
+  ingest --> projectMap
+  projectMap --> concept
+  concept --> brief
+  brief --> evidence
+  evidence --> dossier
+  dossier --> verify
+  verify -->|passes| cache
+  verify -->|fails| retry
+  retry --> verify
+  retry -->|still fails| fallback
+  fallback --> cache
+  cache --> ui
+  concept --> linked
+  brief --> linked
+```
+
+
 
 Everything is local. The files, the generated pages, and the map of
 concepts all live on your machine. The only thing that leaves is the
@@ -159,23 +219,31 @@ small slice of text the model needs to write a page— and only if
 you've pointed it at a remote model like Claude or GPT. Using a local
 model (via Ollama) keeps the whole loop offline.
 
-***
+Bird Brain's own workspace databases and registry live under the repo's
+`data/` folder by default (`data/workspaces.json` + `data/workspace-dbs/`).
+Set `BIRDBRAIN_DATA_DIR` if you want that metadata somewhere else; older
+installs may still have a legacy `~/.birdbrain/` folder that gets merged in
+on first launch.
+
+---
 
 ## Data model (today)
 
-| Table                         | Role                                                              |
-| ----------------------------- | ----------------------------------------------------------------- |
-| `documents`, `chunks`         | Raw corpus + heading-delimited chunks                              |
-| `chunks_fts`                  | FTS5 mirror for lexical retrieval                                  |
-| `entities`, `entity_mentions` | Seeded + emerged concepts and their per-chunk mentions             |
-| `concept_synthesis`           | Cached hypertextual paragraphs (live + queued profiles)            |
-| `synthesis_queue`             | Background work list for queued synthesis                           |
-| `ontology_runs`, `ontology_concepts`, `ontology_lenses` | LLM-assisted ontology overview          |
-| `concept_precontext_cache`    | Bird's-eye precontext per concept, invalidated by corpus signature |
-| `participation_sessions`, `participation_events` | Live click/read trail that feeds the memesis loop |
-| `project_meta`                | Project name + engine config + guidance notes                       |
 
-***
+| Table                                                   | Role                                                               |
+| ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `documents`, `chunks`                                   | Raw corpus + heading-delimited chunks                              |
+| `chunks_fts`                                            | FTS5 mirror for lexical retrieval                                  |
+| `entities`, `entity_mentions`                           | Seeded + emerged concepts and their per-chunk mentions             |
+| `concept_synthesis`                                     | Cached hypertextual paragraphs (live + queued profiles)            |
+| `synthesis_queue`                                       | Background work list for queued synthesis                          |
+| `ontology_runs`, `ontology_concepts`, `ontology_lenses` | LLM-assisted ontology overview                                     |
+| `concept_precontext_cache`                              | Bird's-eye precontext per concept, invalidated by corpus signature |
+| `participation_sessions`, `participation_events`        | Live click/read trail that feeds the memesis loop                  |
+| `project_meta`                                          | Project name + engine config + guidance notes                      |
+
+
+---
 
 ## Repo layout
 

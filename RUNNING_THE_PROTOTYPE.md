@@ -57,7 +57,11 @@ npm run dev
 Open <http://localhost:3000>. This is the workspace picker. Add a folder of
 readable files (see the picker copy for extensions; source code is optional)
 and the app will ingest into a SQLite database under
-`~/.birdbrain/workspaces/<id>.db`. Each workspace is isolated.
+`data/workspace-dbs/<id>.db` (repo-local `data/` folder by default). Each
+workspace is isolated.
+
+If you want app metadata somewhere else, set `BIRDBRAIN_DATA_DIR` to an
+absolute path before starting the dev server / desktop app.
 
 Useful scripts inside `app/`:
 
@@ -72,9 +76,13 @@ npm run start                           # run the production web build
 Engine settings (Cursor CLI / OpenAI / Anthropic / Ollama) are configured
 from the gear icon in the top chrome. API keys can live in either:
 
-- `~/.birdbrain/secrets.json` (written by the Engine Settings panel), or
+- `data/secrets.json` (repo-local convenience file; also where the Engine
+  Settings panel writes when you choose the local file fallback), or
 - your shell environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.), or
 - the OS keychain (desktop builds only — see below).
+
+Older installs may still have `~/.birdbrain/secrets.json`; Bird Brain will
+read that legacy path if present.
 
 ---
 
@@ -186,8 +194,9 @@ From the workspace picker:
    - exploration branches (scoped by `localStorage`),
    - engine configuration (provider, model, API key env var).
 
-On a different computer, copy the folder of markdown, install Bird Brain,
-point it at the folder, and the same ingest + ontology pipeline runs.
+On a different computer, copy the project folder (notes + code + whatever
+you want indexed), install Bird Brain, point it at the folder, and the same
+ingest + ontology pipeline runs.
 
 ---
 

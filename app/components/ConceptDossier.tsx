@@ -1,9 +1,18 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import { useDossier } from './DossierContext';
 import { useOptionalWorkspace } from './WorkspaceProvider';
 import { logParticipation } from '../lib/participation/log';
+import type { EvidenceConflict } from '@/lib/ai/evidence-conflicts';
 import {
   STATUS_COLORS,
   TYPE_COLORS,
@@ -47,6 +56,8 @@ type Span =
   | { text: string }
   | { text: string; ref: string; kind: 'known' | 'candidate' };
 
+type DossierViewMode = 'primary' | 'spanify';
+
 interface DossierError {
   code: string;
   message: string;
@@ -76,10 +87,15 @@ interface DossierData {
   paragraph: Span[] | null;
   evidence: EvidenceRow[];
   related: RelatedConcept[];
+  possible_conflicts?: EvidenceConflict[];
   generated_at?: number;
   generator?: string;
   model?: string;
   error?: DossierError;
+}
+
+function dossierBranchLooksPending(d: DossierData) {
+  return Boolean(d.pending || d.blocked || d.error || !d.paragraph);
 }
 
 export function ConceptDossier() {
@@ -88,7 +104,6 @@ export function ConceptDossier() {
     openConcept,
     openDoc,
     close,
-    synthesisMode,
     branchContext,
     markBranchStatus,
   } = useDossier();
@@ -100,28 +115,43 @@ export function ConceptDossier() {
   const [queuingPhrase, setQueuingPhrase] = useState<string | null>(null);
   const [queueActivity, setQueueActivity] = useState<'idle' | 'status' | 'generating'>('idle');
   const [regenerating, setRegenerating] = useState(false);
-  const [dossierFork, setDossierFork] = useState<'default' | 'spanify'>(() => {
-    if (typeof window === 'undefined') return 'default';
-    return window.localStorage.getItem('birdbrain.dossierFork') === 'spanify' ? 'spanify' : 'default';
+  const [exportStatus, setExportStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const exportStatusTimer = useRef<number | null>(null);
+  const [dossierViewMode, setDossierViewMode] = useState<DossierViewMode>(() => {
+    if (typeof window === 'undefined') return 'primary';
+    return window.localStorage.getItem('birdbrain.dossierViewMode') === 'spanify'
+      ? 'spanify'
+      : 'primary';
   });
 
-  const effectiveFork = synthesisMode === 'live' ? dossierFork : 'default';
-
+  const requestMode: 'live' | 'queued' = dossierViewMode === 'spanify' ? 'live' : 'queued';
+  const effectiveFork: 'default' | 'spanify' = dossierViewMode === 'spanify' ? 'spanify' : 'default';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem('birdbrain.dossierFork', dossierFork);
-  }, [dossierFork]);
+    window.localStorage.setItem('birdbrain.dossierViewMode', dossierViewMode);
+  }, [dossierViewMode]);
+
+  useEffect(() => {
+    return () => {
+      if (exportStatusTimer.current != null) {
+        window.clearTimeout(exportStatusTimer.current);
+        exportStatusTimer.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!conceptSlug) {
       setData(null);
       setShowEvidence(false);
+      setExportStatus('idle');
       return;
     }
     setLoading(true);
     setData(null);
     setShowEvidence(false);
-    fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext, effectiveFork))
+    fetch(buildDossierUrl(conceptSlug, requestMode, branchContext, effectiveFork))
       .then(async (r) => {
         const text = await r.text();
         try {
@@ -134,18 +164,18 @@ export function ConceptDossier() {
       })
       .then((d) => {
         setData(d);
-        markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+        markBranchStatus(conceptSlug, dossierBranchLooksPending(d) ? 'pending' : 'ready');
       })
       .catch(() => {
         setData(null);
         markBranchStatus(conceptSlug, 'idle');
       })
       .finally(() => setLoading(false));
-  }, [conceptSlug, synthesisMode, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus, effectiveFork]);
+  }, [conceptSlug, requestMode, branchContext.branchId, branchContext.fromSlug, branchContext.rootSlug, markBranchStatus, effectiveFork]);
 
   useEffect(() => {
-    if (!conceptSlug || synthesisMode !== 'queued' || !data?.pending) return;
-    const timer = window.setInterval(async () => {
+    if (!conceptSlug || requestMode !== 'queued' || !data?.pending) return;
+    const tick = async () => {
       try {
         setQueueActivity('status');
         const pendingRes = await fetch('/api/dossier/pending?mode=queued', { cache: 'no-store' });
@@ -157,21 +187,23 @@ export function ConceptDossier() {
         } else {
           setQueueActivity('idle');
         }
-        const res = await fetch(buildDossierUrl(conceptSlug, synthesisMode, branchContext, effectiveFork));
+        const res = await fetch(buildDossierUrl(conceptSlug, requestMode, branchContext, effectiveFork));
         const next = (await res.json()) as DossierData;
         setData(next);
-        markBranchStatus(conceptSlug, next.pending || next.blocked ? 'pending' : 'ready');
+        markBranchStatus(conceptSlug, dossierBranchLooksPending(next) ? 'pending' : 'ready');
       } catch {
         setQueueActivity('idle');
       }
-    }, 4000);
+    };
+    void tick();
+    const timer = window.setInterval(tick, 3500);
     return () => {
       setQueueActivity('idle');
       window.clearInterval(timer);
     };
   }, [
     conceptSlug,
-    synthesisMode,
+    requestMode,
     data?.pending,
     branchContext.branchId,
     branchContext.fromSlug,
@@ -216,7 +248,7 @@ export function ConceptDossier() {
   );
 
   async function regenerateDossier() {
-    if (!conceptSlug || !data || data.blocked) return;
+    if (!conceptSlug || !data) return;
     setRegenerating(true);
     try {
       const res = await fetch(`/api/dossier/${encodeURIComponent(conceptSlug)}`, {
@@ -224,7 +256,7 @@ export function ConceptDossier() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'regenerate',
-          profile: synthesisMode,
+          profile: requestMode,
           from: branchContext.fromSlug ?? undefined,
           root: branchContext.rootSlug ?? undefined,
           branch: branchContext.branchId ?? undefined,
@@ -234,7 +266,7 @@ export function ConceptDossier() {
       const d = (await res.json()) as DossierData;
       if (d && typeof d === 'object' && 'concept' in d && d.concept) {
         setData(d);
-        markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+        markBranchStatus(conceptSlug, dossierBranchLooksPending(d) ? 'pending' : 'ready');
       }
     } finally {
       setRegenerating(false);
@@ -366,26 +398,25 @@ export function ConceptDossier() {
               fontWeight: 600,
             }}
           >
-            Dossier engine (fork)
+            Dossier mode
           </span>
           <div
             style={{
               display: 'inline-flex',
-              border: `1px solid ${synthesisMode === 'live' ? '#3a3a3a' : '#252525'}`,
+              border: '1px solid #3a3a3a',
               borderRadius: 4,
               overflow: 'hidden',
-              opacity: synthesisMode === 'live' ? 1 : 0.65,
             }}
           >
             <button
               type="button"
-              onClick={() => synthesisMode === 'live' && setDossierFork('default')}
-              title="Full dossier synthesis (evidence + span pass)."
+              onClick={() => setDossierViewMode('primary')}
+              title="Dossier: a slightly deeper hypertext version of the brief."
               style={{
-                background: dossierFork === 'default' ? '#1c1c1c' : 'transparent',
+                background: dossierViewMode === 'primary' ? '#1c1c1c' : 'transparent',
                 border: 'none',
-                color: dossierFork === 'default' ? '#ddd' : '#666',
-                cursor: synthesisMode === 'live' ? 'pointer' : 'not-allowed',
+                color: dossierViewMode === 'primary' ? '#ddd' : '#666',
+                cursor: 'pointer',
                 fontSize: '0.55rem',
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -393,18 +424,18 @@ export function ConceptDossier() {
                 padding: '6px 10px',
               }}
             >
-              Default
+              Dossier
             </button>
             <button
               type="button"
-              onClick={() => synthesisMode === 'live' && setDossierFork('spanify')}
-              title="Segment precontext into hypertext only (no full dossier rewrite)."
+              onClick={() => setDossierViewMode('spanify')}
+              title="Lite: reuse the brief and only add links."
               style={{
-                background: dossierFork === 'spanify' ? '#1c1c1c' : 'transparent',
+                background: dossierViewMode === 'spanify' ? '#1c1c1c' : 'transparent',
                 border: 'none',
                 borderLeft: '1px solid #2a2a2a',
-                color: dossierFork === 'spanify' ? '#ddd' : '#666',
-                cursor: synthesisMode === 'live' ? 'pointer' : 'not-allowed',
+                color: dossierViewMode === 'spanify' ? '#ddd' : '#666',
+                cursor: 'pointer',
                 fontSize: '0.55rem',
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -412,14 +443,12 @@ export function ConceptDossier() {
                 padding: '6px 10px',
               }}
             >
-              Precontext → hypertext
+              Lite
             </button>
           </div>
-          {synthesisMode !== 'live' && (
-            <span style={{ fontSize: '0.6rem', color: '#666', maxWidth: 280, lineHeight: 1.35 }}>
-              Fork only runs in <strong style={{ color: '#999' }}>Live</strong> synthesis — use the Live / Queued toggle in the top bar.
-            </span>
-          )}
+          <span style={{ fontSize: '0.6rem', color: '#666', maxWidth: 280, lineHeight: 1.35 }}>
+            Dossier lightly deepens the brief. Lite only adds links.
+          </span>
         </div>
       </div>
 
@@ -428,7 +457,7 @@ export function ConceptDossier() {
           <LoadingState
             name={targetName}
             accent={typeColor}
-            mode={synthesisMode}
+            mode={requestMode}
             branchContextName={branchContextName}
           />
         )}
@@ -436,7 +465,7 @@ export function ConceptDossier() {
         {!loading && data?.paragraph && (
           <section>
             <SectionHeader
-              label="SYNTHESIS"
+              label="DOSSIER"
               accent={typeColor}
               badge={
                 data.synthesis_variant === 'spanify_precontext' ? (
@@ -453,7 +482,7 @@ export function ConceptDossier() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    Fork: precontext → hypertext
+                    Lite: briefing → links
                   </span>
                 ) : (
                   <span
@@ -465,20 +494,20 @@ export function ConceptDossier() {
                       textTransform: 'uppercase',
                     }}
                   >
-                    Full dossier synthesis
+                    Dossier
                   </span>
                 )
               }
               actions={
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
                   <button
                     type="button"
-                    onClick={() => copyDossierAsMarkdown(data, targetName)}
-                    title="Copy this dossier (paragraph + sources) to the clipboard as Markdown."
+                    onClick={() => void copyDossierAsPlainText(data, setExportStatus, exportStatusTimer)}
+                    title="Copy the generated dossier paragraph to the clipboard as plain text (no title or sources)."
                     style={{
                       background: 'transparent',
                       border: '1px solid #2a2a2a',
-                      color: '#888',
+                      color: exportStatus === 'failed' ? '#c77' : '#888',
                       cursor: 'pointer',
                       fontSize: '0.55rem',
                       letterSpacing: '0.14em',
@@ -487,13 +516,13 @@ export function ConceptDossier() {
                       padding: '6px 10px',
                     }}
                   >
-                    Export
+                    {exportStatus === 'copied' ? 'Copied' : exportStatus === 'failed' ? 'Copy failed' : 'Export'}
                   </button>
                   <button
                     type="button"
                     onClick={() => void regenerateDossier()}
                     disabled={regenerating || data.blocked}
-                    title="Clear cached synthesis and run the engine again with current settings and prompts."
+                    title="Clear cached output and run the model again with current settings and prompts."
                     style={{
                       background: 'transparent',
                       border: '1px solid #2a2a2a',
@@ -518,13 +547,14 @@ export function ConceptDossier() {
               queuingPhrase={queuingPhrase}
             />
             <SourcesStrip evidence={data.evidence} onOpen={openDoc} />
+            <PossibleConflictsStrip conflicts={data.possible_conflicts} onOpenDoc={openDoc} />
             {data.generator && (
               <div style={{ marginTop: 14, fontSize: '0.55rem', color: '#333', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
-                {data.profile ?? synthesisMode}
+                {data.profile ?? requestMode}
                 {' · '}
                 {data.synthesis_variant === 'spanify_precontext'
-                  ? 'precontext → hypertext fork'
-                  : 'full synthesis'}
+                  ? 'lite linked brief'
+                  : 'dossier'}
                 {' · '}generated by {data.generator}
                 {data.model ? ` · ${data.model}` : ''}
               </div>
@@ -539,7 +569,7 @@ export function ConceptDossier() {
                 type="button"
                 onClick={() => void regenerateDossier()}
                 disabled={regenerating || Boolean(data.blocked)}
-                title="Drop cached output and re-queue or re-run synthesis from scratch."
+                title="Drop cached output and re-queue or re-run from scratch."
                 style={{
                   background: 'transparent',
                   border: '1px solid #2a2a2a',
@@ -563,15 +593,15 @@ export function ConceptDossier() {
               onRetry={() => {
                 if (!conceptSlug) return;
                 setLoading(true);
-                fetch(`${buildDossierUrl(conceptSlug, synthesisMode, branchContext, effectiveFork)}&t=${Date.now()}`)
+                fetch(`${buildDossierUrl(conceptSlug, requestMode, branchContext, effectiveFork)}&t=${Date.now()}`)
                   .then((r) => r.json())
                   .then((d) => {
                     setData(d);
-                    markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+                    markBranchStatus(conceptSlug, dossierBranchLooksPending(d) ? 'pending' : 'ready');
                   })
                   .finally(() => setLoading(false));
               }}
-              mode={synthesisMode}
+              mode={requestMode}
               queueActivity={queueActivity}
             />
           </div>
@@ -590,7 +620,7 @@ export function ConceptDossier() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   action: 'regenerate',
-                  profile: synthesisMode,
+                  profile: requestMode,
                   from: branchContext.fromSlug ?? undefined,
                   root: branchContext.rootSlug ?? undefined,
                   branch: branchContext.branchId ?? undefined,
@@ -600,13 +630,17 @@ export function ConceptDossier() {
                 .then((r) => r.json())
                 .then((d) => {
                   setData(d);
-                  markBranchStatus(conceptSlug, d.pending || d.blocked ? 'pending' : 'ready');
+                  markBranchStatus(conceptSlug, dossierBranchLooksPending(d) ? 'pending' : 'ready');
                 })
                 .finally(() => setLoading(false));
             }}
-            mode={synthesisMode}
+            mode={requestMode}
             queueActivity={queueActivity}
           />
+        )}
+
+        {!loading && data && (data.possible_conflicts?.length ?? 0) > 0 && !data.paragraph && (
+          <PossibleConflictsStrip conflicts={data.possible_conflicts} onOpenDoc={openDoc} />
         )}
 
         {!loading && data?.related && data.related.length > 0 && (
@@ -768,12 +802,12 @@ function PendingBanner({
       ? 'CURSOR AGENT NOT INSTALLED'
       : mode === 'queued'
         ? pendingStage === 'precontext'
-          ? 'QUEUED FOR PRECONTEXT'
-          : 'QUEUED FOR DOSSIER'
-      : 'SYNTHESIS UNAVAILABLE';
+          ? 'BUILDING BRIEF'
+          : 'BUILDING DOSSIER'
+      : 'LITE BRIEFING UNAVAILABLE';
   const body = isAuth ? (
     <>
-      The live synthesis path uses the Cursor Agent CLI on your machine. Run{' '}
+      Bird Brain uses the Cursor Agent CLI on your machine. Run{' '}
       <code style={{ color: '#00b4d8' }}>cursor-agent login</code> in a terminal, then retry.
     </>
   ) : isMissing ? (
@@ -788,17 +822,16 @@ function PendingBanner({
         <>
           <strong style={{ color: '#eee' }}>{name}</strong>{' '}
           {pendingStage === 'precontext'
-            ? 'is building its bird’s-eye precontext first.'
-            : 'already has precontext and is waiting on the final dossier paragraph.'}{' '}
-          The preview will keep processing it automatically in the background while evidence stays
-          visible below.{' '}
+            ? 'is building the brief first.'
+            : 'already has its brief and is writing the dossier.'}{' '}
+          Bird Brain will keep processing it automatically while evidence stays visible below.{' '}
           <span style={{ color: '#666' }}>
             {queueActivity === 'generating'
               ? pendingStage === 'precontext'
-                ? 'Background precontext generation is active now.'
-                : 'Background dossier generation is active now.'
+                ? 'Generating the briefing now.'
+                : 'Generating the dossier now.'
               : queueActivity === 'status'
-                ? 'Checking queue status.'
+                ? 'Checking the queue.'
                 : 'Waiting for queued work.'}
           </span>
         </>
@@ -811,7 +844,7 @@ function PendingBanner({
               (<span style={{ color: '#e74c9b' }}>{error.message}</span>)
             </>
           ) : null}
-          . Supporting snippets from the rest of the corpus are shown below in the meantime.
+          . Supporting snippets from the rest of the project are shown below in the meantime.
         </>
       )}
     </>
@@ -886,7 +919,7 @@ function PendingBanner({
           cursor: 'pointer',
         }}
       >
-        retry synthesis
+        retry
       </button>
     </div>
   );
@@ -912,7 +945,7 @@ function PrecontextCard({ precontext }: { precontext: PrecontextData }) {
           fontWeight: 700,
         }}
       >
-        PRECONTEXT READY
+        BRIEF READY
       </div>
       <div style={{ color: '#d8d8d8', fontSize: '0.9rem', lineHeight: 1.65 }}>{precontext.precontext_text}</div>
       <div style={{ display: 'grid', gap: 8 }}>
@@ -969,22 +1002,20 @@ function LoadingState({
       <div style={{ color: '#777', fontSize: '0.82rem', lineHeight: 1.6 }}>
         {mode === 'queued' ? (
           <>
-            Queueing <strong style={{ color: '#ccc' }}>{name}</strong> for the slower quality lane.
+            Queueing <strong style={{ color: '#ccc' }}>{name}</strong> for the expanded dossier.
             {branchContextName ? (
               <> Using branch context from <strong style={{ color: '#ccc' }}>{branchContextName}</strong>.</>
             ) : null}{' '}
-            The preview will process pending dossiers automatically and cache the result when it is
-            ready.
+            Bird Brain will process it automatically, cache the result, and swap it in when ready.
           </>
         ) : (
           <>
-            Generating a dossier for <strong style={{ color: '#ccc' }}>{name}</strong>
+            Building a lite briefing for <strong style={{ color: '#ccc' }}>{name}</strong>
             {branchContextName ? (
               <> using branch context from <strong style={{ color: '#ccc' }}>{branchContextName}</strong></>
             ) : null}
-            . Bird Brain is grounding the paragraph in current project evidence, then asking the
-            Cursor agent to write the hypertext summary. First open of a concept can take 10–30s;
-            the result is cached afterwards.
+            . Bird Brain is reusing the brief and asking the Cursor agent only to add
+            clickable spans. The result is cached afterwards.
           </>
         )}
       </div>
@@ -1117,52 +1148,117 @@ function SourcesStrip({
   );
 }
 
-function spansToPlain(paragraph: Span[] | null | undefined): string {
-  if (!paragraph) return '';
-  return paragraph
-    .map((s) => {
-      if ('ref' in s && s.kind === 'known') {
-        // Stable cross-dossier link form so exports don't break when the UI changes.
-        return `[${s.text}](#/concept/${s.ref})`;
-      }
-      return s.text;
-    })
-    .join('');
+function PossibleConflictsStrip({
+  conflicts,
+  onOpenDoc,
+}: {
+  conflicts: EvidenceConflict[] | undefined;
+  onOpenDoc: (docId: number) => void;
+}) {
+  if (!conflicts || conflicts.length === 0) return null;
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: '10px 12px',
+        border: '1px solid rgba(199, 119, 119, 0.35)',
+        background: 'rgba(199, 119, 119, 0.06)',
+        borderRadius: 4,
+      }}
+    >
+      <div
+        style={{
+          fontSize: '0.55rem',
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+          fontWeight: 700,
+          color: '#c99',
+          marginBottom: 8,
+        }}
+      >
+        Possible conflicts
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {conflicts.map((c) => (
+          <div key={`${c.kind}-${c.a.doc_id}-${c.b.doc_id}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: '0.72rem', color: '#ddd', lineHeight: 1.45 }}>{c.summary}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'stretch' }}>
+              <ConflictDocChip side={c.a} onOpen={() => onOpenDoc(c.a.doc_id)} />
+              <span style={{ alignSelf: 'center', color: '#666', fontSize: '0.65rem' }}>vs</span>
+              <ConflictDocChip side={c.b} onOpen={() => onOpenDoc(c.b.doc_id)} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 8, fontSize: '0.62rem', color: '#777', lineHeight: 1.45 }}>
+        Heuristic only — docs can disagree for legitimate reasons (draft vs canon, scope change, etc.).
+      </div>
+    </div>
+  );
 }
 
-function copyDossierAsMarkdown(data: DossierData, targetName: string) {
-  const lines: string[] = [];
-  lines.push(`# ${targetName}`);
-  if (data.concept?.type) lines.push(`> ${data.concept.type}`);
-  lines.push('');
-  lines.push(spansToPlain(data.paragraph));
-  const seen = new Set<number>();
-  const uniqueDocs: { title: string; status: string; heading: string | null }[] = [];
-  for (const e of data.evidence ?? []) {
-    if (seen.has(e.doc_id)) continue;
-    seen.add(e.doc_id);
-    uniqueDocs.push({ title: e.doc_title, status: e.doc_status, heading: e.heading });
-  }
-  if (uniqueDocs.length > 0) {
-    lines.push('');
-    lines.push('## Sources');
-    for (const d of uniqueDocs) {
-      const statusLabel = documentStatusBadgeLabel(d.status).toLowerCase();
-      const heading = d.heading ? ` — ${d.heading}` : '';
-      lines.push(`- **${d.title}**${heading} _(${statusLabel})_`);
+function ConflictDocChip({
+  side,
+  onOpen,
+}: {
+  side: EvidenceConflict['a'];
+  onOpen: () => void;
+}) {
+  const color = STATUS_COLORS[side.doc_status] ?? '#666';
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`${side.doc_title} · ${documentStatusBadgeLabel(side.doc_status)}`}
+      style={{
+        textAlign: 'left',
+        flex: '1 1 220px',
+        minWidth: 180,
+        background: '#0f0f0f',
+        border: '1px solid #1d1d1d',
+        borderLeft: `2px solid ${color}`,
+        padding: '8px 10px',
+        cursor: 'pointer',
+        color: '#ccc',
+      }}
+    >
+      <div style={{ fontSize: '0.72rem', color: '#eee', marginBottom: 4 }}>{side.doc_title}</div>
+      <div style={{ fontSize: '0.56rem', color, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 4 }}>
+        {documentStatusBadgeLabel(side.doc_status)}
+      </div>
+      {side.heading ? (
+        <div style={{ fontSize: '0.62rem', color: '#666', marginBottom: 4 }}>{side.heading}</div>
+      ) : null}
+      <div style={{ fontSize: '0.68rem', color: '#888', lineHeight: 1.45 }}>{side.excerpt}</div>
+    </button>
+  );
+}
+
+/** Join dossier spans as plain text (no markdown links). */
+function paragraphToPlainText(paragraph: Span[] | null | undefined): string {
+  if (!paragraph) return '';
+  return paragraph.map((s) => s.text).join('');
+}
+
+async function copyDossierAsPlainText(
+  data: DossierData,
+  setExportStatus: Dispatch<SetStateAction<'idle' | 'copied' | 'failed'>>,
+  timerRef: MutableRefObject<number | null>
+) {
+  const text = paragraphToPlainText(data.paragraph);
+  try {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      setExportStatus('failed');
+      return;
     }
-  }
-  if (data.generator) {
-    lines.push('');
-    lines.push(
-      `_Generated by ${data.generator}${data.model ? ` · ${data.model}` : ''} · profile: ${
-        data.profile ?? 'live'
-      }_`
-    );
-  }
-  const text = lines.join('\n');
-  if (typeof navigator !== 'undefined' && navigator.clipboard) {
-    void navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(text);
+    setExportStatus('copied');
+    if (timerRef.current != null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setExportStatus('idle'), 1600);
+  } catch {
+    setExportStatus('failed');
+    if (timerRef.current != null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setExportStatus('idle'), 2400);
   }
 }
 
