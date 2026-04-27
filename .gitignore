@@ -6,6 +6,7 @@ notes/
 scratch/
 *.plan.md
 *.private.md
+ARCHITECTURE_BEFORE_AFTER.md
 
 # ── Test corpora / local data ──────────────────────────────
 data/
