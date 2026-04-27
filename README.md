@@ -143,17 +143,16 @@ Desktop (Tauri) build: `[RUNNING_THE_PROTOTYPE.md](RUNNING_THE_PROTOTYPE.md)`.
 
 ```mermaid
 flowchart TD
-    A["Your folder<br/><i>notes, drafts, research</i>"] --> B["Bird Brain reads<br/>every file"]
-    B --> C["Builds a starter map<br/>of concepts from filenames,<br/>headings, and proper nouns"]
-    C --> D["You click a concept"]
-    D --> E["The engine writes a short page,<br/>grounded in your actual files"]
-    E --> F["Every phrase in the page<br/>is clickable"]
-    F -->|click a known concept| D
-    F -->|click a new phrase| G["New concept<br/>promoted into the map"]
-    G -->|joins the hub| C
-    G -->|and is clickable<br/>from here on| D
-    E --> H["Journal panel notes<br/>what you keep circling"]
-    H -.->|over time, nudges<br/>what gets surfaced| C
+    A[Your folder] --> B[Bird Brain reads the files]
+    B --> C[Builds a starter concept map]
+    C --> D[You click a concept]
+    D --> E[Writes a grounded page]
+    E --> F[Page phrases become clickable]
+    F -->|Known concept| D
+    F -->|New phrase| G[New concept joins the map]
+    G --> C
+    E --> H[Journal notes what you keep circling]
+    H -.-> C
 
     style A fill:#f4f0e8,stroke:#8a7f6a,color:#2a2a2a
     style G fill:#e8f0f4,stroke:#6a8799,color:#2a2a2a
@@ -180,21 +179,21 @@ the "lite" mode that is currently hidden behind the "live" mode idea.
 
 ```mermaid
 flowchart TB
-  folder["Project folder, read-only from Bird Brain's perspective"]
-  ingest["Ingest readable files and code"]
-  projectMap["AI project map + starter topics"]
-  concept["User opens concept"]
-  brief["Brief for this topic"]
-  evidence["SQL evidence retrieval with safe FTS"]
-  dossier["Slightly expanded dossier"]
-  verify["Subject check: starts with target concept"]
-  retry["Retry if off-target"]
-  fallback["Brief fallback if still off-target"]
-  cache["Cache only verified/fallback dossier"]
-  ui["Display main dossier"]
-  linked["Optional "lite" briefing"]
+  folder[Project folder]
+  ingest[Ingest readable files and code]
+  projectMap[Project map and starter topics]
+  concept[User opens concept]
+  brief[Brief for this topic]
+  evidence[Evidence retrieval]
+  dossier[Expanded dossier]
+  verify[Subject check]
+  retry[Retry if off target]
+  fallback[Brief fallback]
+  cache[Cache verified result]
+  ui[Display main dossier]
+  linked[Optional lite briefing]
 
-  folder --> ingeståå
+  folder --> ingest
   ingest --> projectMap
   projectMap --> concept
   concept --> brief
