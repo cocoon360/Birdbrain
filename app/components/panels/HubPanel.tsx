@@ -84,13 +84,16 @@ export function HubPanel() {
   const blocked = data?.startup ? !data.startup.ready : false;
 
   return (
-    <div className="metro-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
           bird brain — {data?.meta?.project_name?.toLowerCase() ?? 'project'}
         </div>
         <h1 className="metro-title">hub</h1>
-        <p className="metro-lead">
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 18, paddingBottom: 32 }} className="thin-scrollbar">
+        <p className="metro-lead" style={{ marginTop: 0 }}>
           Snapshot of ingested material: document counts by folder-derived status, drift alerts, and
           starter lenses. Click a concept to open its dossier.
         </p>
@@ -100,25 +103,22 @@ export function HubPanel() {
             style={{
               marginTop: 12,
               maxWidth: 620,
-              padding: '12px 14px',
+              padding: '10px 12px',
               color: 'var(--text-dim)',
-              fontSize: 14,
-              lineHeight: 1.6,
+              fontSize: 13,
+              lineHeight: 1.5,
             }}
           >
             {data.startup.summary_text}
           </div>
         )}
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 12 }} className="thin-scrollbar">
-        {data && (
+      {data && (
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 14,
-              marginBottom: 24,
+              gap: 10,
+              marginBottom: 18,
             }}
           >
             <StatTile label="TOTAL DOCS" value={data.stats.total_docs} />
@@ -126,9 +126,9 @@ export function HubPanel() {
             <StatTile label="IN PROGRESS" value={data.stats.working_docs} color="#f6c90e" />
             <StatTile label="CONCEPTS" value={data.stats.total_entities} color="#00b4d8" />
           </div>
-        )}
+      )}
 
-        {blocked && (
+      {blocked && (
           <div
             className="metro-surface"
             style={{
@@ -143,12 +143,12 @@ export function HubPanel() {
             Bird Brain has not built a project map yet. Use the start screen to build or rebuild it
             before relying on hub concepts.
           </div>
-        )}
+      )}
 
-        {top.length > 0 && !blocked && (
+      {top.length > 0 && (
           <>
             <SectionHeader
-              title={showAllConcepts ? 'ALL CONCEPTS' : 'STARTER LENSES'}
+              title={blocked ? 'LOCAL CONCEPTS' : showAllConcepts ? 'ALL CONCEPTS' : 'STARTER LENSES'}
               action={
                 hiddenConceptCount > 0 ? (
                   <button
@@ -186,16 +186,18 @@ export function HubPanel() {
                 fontWeight: 600,
               }}
             >
-              {showAllConcepts
-                ? `Showing all ${allConcepts.length} concepts, ranked by grounding.`
-                : `Showing ${starterConcepts.length} starter lenses out of ${allConcepts.length} concepts.`}
+              {blocked
+                ? `Showing ${visibleConcepts.length} locally derived concepts while the project map is unavailable.`
+                : showAllConcepts
+                  ? `Showing all ${allConcepts.length} concepts, ranked by grounding.`
+                  : `Showing ${starterConcepts.length} starter lenses out of ${allConcepts.length} concepts.`}
             </p>
             <div
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
                 gap: 12,
-                marginBottom: 22,
+              marginBottom: 16,
               }}
             >
               {top.map((c) => (
@@ -212,7 +214,7 @@ export function HubPanel() {
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
                 gap: 10,
-                marginBottom: 28,
+                marginBottom: 20,
               }}
             >
               {next.map((c) => (
@@ -225,9 +227,25 @@ export function HubPanel() {
               ))}
             </div>
           </>
-        )}
+      )}
 
-        {data && data.emerged && data.emerged.length > 0 && (
+      {data && top.length === 0 && (
+        <div
+          className="metro-surface"
+          style={{
+            marginBottom: 28,
+            padding: '14px 16px',
+            color: 'var(--text-dim)',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          No concepts are ready yet. Re-scan the folder from the startup screen, then use local
+          reader mode or build the project map to populate the hub.
+        </div>
+      )}
+
+      {data && data.emerged && data.emerged.length > 0 && (
           <div style={{ marginBottom: 28 }}>
             <SectionHeader title="EMERGED FROM EXPLORATION" accent="#e74c9b" />
             <p style={{ fontSize: '0.7rem', color: '#666', margin: '0 0 12px', maxWidth: 560, lineHeight: 1.55 }}>
@@ -266,9 +284,9 @@ export function HubPanel() {
               ))}
             </div>
           </div>
-        )}
+      )}
 
-        {branches.length > 0 && (
+      {branches.length > 0 && (
           <div style={{ marginBottom: 28 }}>
             <SectionHeader title="BRANCHES ON THE HUD" accent={BRANCH_COLORS.new} />
             <p style={{ fontSize: '0.7rem', color: '#666', margin: '0 0 12px', maxWidth: 560, lineHeight: 1.55 }}>
@@ -308,8 +326,7 @@ export function HubPanel() {
               ))}
             </div>
           </div>
-        )}
-
+      )}
       </div>
     </div>
   );

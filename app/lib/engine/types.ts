@@ -3,7 +3,7 @@
 // this interface so higher layers can swap providers per workspace
 // without code changes.
 
-export type EngineProvider = 'cursor-cli' | 'openai' | 'anthropic' | 'ollama';
+export type EngineProvider = 'local' | 'cursor-cli' | 'openai' | 'anthropic' | 'ollama';
 
 export interface EngineConfig {
   provider: EngineProvider;

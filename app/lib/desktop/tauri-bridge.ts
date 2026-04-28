@@ -4,11 +4,6 @@
 // import resolves and we wire IPC commands; otherwise the helpers degrade
 // to web-only fallbacks.
 
-export interface TauriPickedFolder {
-  path: string;
-  name: string;
-}
-
 interface TauriInvoke {
   invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 }
@@ -37,12 +32,6 @@ async function getInvoke(): Promise<TauriInvoke['invoke'] | null> {
   } catch {
     return null;
   }
-}
-
-export async function pickFolderNative(): Promise<TauriPickedFolder | null> {
-  const invoke = await getInvoke();
-  if (!invoke) return null;
-  return (await invoke<TauriPickedFolder | null>('pick_folder')) ?? null;
 }
 
 export async function openWorkspaceWindow(

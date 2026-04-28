@@ -21,8 +21,8 @@
   /* Metro rhythm — two radii only */
   --metro-radius: 0px;
   --metro-radius-input: 0px;
-  --metro-page-pad-x: 32px;
-  --metro-page-pad-y: 28px;
+  --metro-page-pad-x: 28px;
+  --metro-page-pad-y: 24px;
   --metro-chrome-h: 52px;
 }
 
@@ -62,7 +62,7 @@ html, body {
 .metro-panel {
   box-sizing: border-box;
   height: 100%;
-  padding: var(--metro-page-pad-y) var(--metro-page-pad-x) 40px;
+  padding: var(--metro-page-pad-y) var(--metro-page-pad-x) 32px;
 }
 
 /* Metro typography — light display head + stamped subtitle */
@@ -96,7 +96,7 @@ html, body {
 .metro-stat {
   background: var(--surface);
   border: 1px solid var(--border);
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: var(--metro-radius);
 }
 
@@ -114,7 +114,7 @@ html, body {
   border: none;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
-  padding: 14px 16px 14px 14px;
+  padding: 12px 14px 12px 12px;
   cursor: pointer;
   color: var(--text);
   transition: border-color 150ms ease-out, background 150ms ease-out;

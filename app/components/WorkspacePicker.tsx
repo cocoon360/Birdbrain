@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isTauri, openWorkspaceWindow, pickFolderNative } from '@/lib/desktop/tauri-bridge';
+import { isTauri, openWorkspaceWindow } from '@/lib/desktop/tauri-bridge';
 import { FolderBrowserDialog } from './FolderBrowserDialog';
 import { RobotBirdLogo } from './RobotBirdLogo';
+import { metroFont, space, type } from '@/lib/ui/metro-theme';
 
 interface WorkspaceRecord {
   id: string;
@@ -236,33 +237,45 @@ export function WorkspacePicker({
   return (
     <div
       style={{
+        height: '100vh',
         minHeight: '100vh',
         maxHeight: '100vh',
         width: '100vw',
-        background: '#0a0a0a',
-        color: '#f0f0f0',
+        background: 'var(--bg)',
+        color: 'var(--text)',
         display: 'flex',
         alignItems: 'stretch',
-        overflowY: 'auto',
+        overflow: 'hidden',
+        fontFamily: metroFont,
       }}
       className="thin-scrollbar"
     >
-      <div style={{ width: '58%', padding: '48px 56px', borderRight: '1px solid #151515' }}>
+      <div
+        className="thin-scrollbar"
+        style={{
+          flex: '0 0 min(58vw, 760px)',
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: `${space.xl}px ${space.hub}px`,
+          borderRight: '1px solid var(--border)',
+        }}
+      >
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 12,
-            marginBottom: 14,
+            gap: space.sm,
+            marginBottom: space.sm,
           }}
         >
-          <RobotBirdLogo size={36} />
+          <RobotBirdLogo size={32} />
           <div
             style={{
-              fontSize: '0.7rem',
-              color: '#00b4d8',
-              letterSpacing: '0.22em',
+              fontSize: type.stamp,
+              color: 'var(--accent)',
+              letterSpacing: '0.16em',
               fontWeight: 700,
+              textTransform: 'uppercase',
             }}
           >
             BIRD BRAIN · PROJECTS
@@ -270,8 +283,8 @@ export function WorkspacePicker({
         </div>
         <h1
           style={{
-            fontSize: '3.4rem',
-            lineHeight: 1,
+            fontSize: 'clamp(2.4rem, 5vw, 3.4rem)',
+            lineHeight: 0.96,
             fontWeight: 200,
             letterSpacing: '-0.03em',
             margin: 0,
@@ -281,40 +294,40 @@ export function WorkspacePicker({
         </h1>
         <p
           style={{
-            marginTop: 18,
-            fontSize: '0.95rem',
-            color: '#aaa',
-            lineHeight: 1.65,
-            maxWidth: 640,
+            marginTop: space.md,
+            fontSize: type.body,
+            color: 'var(--text-dim)',
+            lineHeight: 1.5,
+            maxWidth: 620,
           }}
         >
-          Bird Brain takes a project folder and uses generative hypertext trees to turn abstract,
-          scattered concepts into approachable, workable ideas. All project info and generated content stays on your machine. Bird Brain ingests it, builds the overview, and drops you into the panorama.
+          Bird Brain turns a project folder into a local panorama of concepts, dossiers, and
+          working threads. It stays on your machine, builds an overview, and drops you into the hub.
         </p>
 
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 14,
-            marginTop: 28,
+            gap: 10,
+            marginTop: space.lg,
           }}
         >
           <PurposeCard
-            title="For Builders"
-            body="Clarify what matters now, what changed, and which concepts deserve active attention."
+            title="For newcomers"
+            body="Define ideas plainly before assuming internal shorthand or prior context."
           />
           <PurposeCard
-            title="For Newcomers"
-            body="Define ideas plainly before assuming any internal shorthand or prior familiarity."
+            title="For builders"
+            body="Clarify what matters now, what changed, and which concepts deserve attention."
           />
           <PurposeCard
-            title="For Product"
-            body="Turn a messy project folder into interactive, navigable understanding."
+            title="For demos"
+            body="Open a messy folder as an explorable map without changing the source files."
           />
         </div>
 
-        <div style={{ marginTop: 28 }}>
+        <div style={{ marginTop: space.lg }}>
           <div
             style={{
               fontSize: '0.62rem',
@@ -326,7 +339,7 @@ export function WorkspacePicker({
           >
             open mode
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
             {(Object.keys(OPEN_MODE_COPY) as OpenMode[]).map((key) => {
               const disabled =
                 (key === 'last-opened' || key === 'fresh-ingest') && !mostRecent;
@@ -337,24 +350,26 @@ export function WorkspacePicker({
                   disabled={disabled}
                   style={{
                     textAlign: 'left',
-                    background: openMode === key ? '#101d21' : '#0f0f0f',
-                    border: `1px solid ${openMode === key ? '#00b4d8' : '#1c1c1c'}`,
-                    padding: '14px 16px',
+                    background: openMode === key ? '#101d21' : 'var(--surface)',
+                    border: `1px solid ${openMode === key ? 'var(--accent)' : 'var(--border)'}`,
+                    padding: '12px 14px',
                     cursor: disabled ? 'not-allowed' : 'pointer',
-                    color: '#ddd',
+                    color: 'var(--text)',
                     opacity: disabled ? 0.45 : 1,
+                    minHeight: 106,
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '0.82rem',
-                      color: openMode === key ? '#00b4d8' : '#f0f0f0',
+                      fontSize: type.label,
+                      color: openMode === key ? 'var(--accent)' : 'var(--text)',
                       marginBottom: 6,
+                      fontWeight: 700,
                     }}
                   >
                     {OPEN_MODE_COPY[key].title}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: type.label, color: 'var(--text-dim)', lineHeight: 1.45 }}>
                     {OPEN_MODE_COPY[key].description}
                   </div>
                 </button>
@@ -364,7 +379,7 @@ export function WorkspacePicker({
         </div>
 
         {openMode === 'pick-folder' && (
-          <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: space.lg }}>
             <div
               style={{
                 fontSize: '0.62rem',
@@ -387,45 +402,15 @@ export function WorkspacePicker({
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={async () => {
+                  onClick={() => {
                     setMessage('');
-                    try {
-                      if (hasNative) {
-                        const picked = await pickFolderNative();
-                        if (picked) {
-                          setFolderInput(picked.path);
-                          if (!nameInput) setNameInput(picked.name);
-                        } else {
-                          setMessage(
-                            'No folder was chosen. If the dialog did not appear, use “browse here”.'
-                          );
-                        }
-                      } else {
-                        setBrowserOpen(true);
-                      }
-                    } catch (err) {
-                      setMessage(
-                        err instanceof Error ? err.message : 'Native folder picker failed.'
-                      );
-                    }
+                    setBrowserOpen(true);
                   }}
                   style={secondaryButtonStyle(false)}
+                  title="Pick a folder using the in-app file tree (same in desktop and web)."
                 >
-                  {hasNative ? 'system dialog' : 'browse'}
+                  browse
                 </button>
-                {hasNative && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMessage('');
-                      setBrowserOpen(true);
-                    }}
-                    style={secondaryButtonStyle(false)}
-                    title="Pick a folder using the in-app file tree (same as the web build)."
-                  >
-                    browse here
-                  </button>
-                )}
               </div>
             </div>
             <input
@@ -447,9 +432,7 @@ export function WorkspacePicker({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', flex: 1 }}>
                 <div style={{ fontSize: '0.66rem', color: '#555', lineHeight: 1.45 }}>
-                  {hasNative
-                    ? 'System dialog or in-app tree, or paste a path.'
-                    : 'Browse your home folder, or paste a path.'}
+                  Browse, or paste a path.
                   {' · '}
                   <span title="Readable: .md .txt .rst .org .adoc .json .yaml .csv .log .toml .ini .html .htm .xml .svg. Binaries, PDFs, images, videos, and dot-folders always skipped. Nothing in your folder is copied or modified.">
                     md + txt + html + svg only
@@ -537,10 +520,12 @@ export function WorkspacePicker({
       <div
         style={{
           flex: 1,
-          padding: '48px',
+          padding: `${space.xl}px`,
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
+          minHeight: 0,
+          overflow: 'hidden',
         }}
       >
         <div
@@ -569,7 +554,9 @@ export function WorkspacePicker({
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 14,
+              gap: 10,
+              flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
               paddingRight: 6,
             }}
@@ -579,12 +566,12 @@ export function WorkspacePicker({
               <div
                 key={ws.id}
                 style={{
-                  background: '#0f0f0f',
-                  border: `1px solid ${i === 0 ? '#1b3b42' : '#181818'}`,
-                  padding: '16px 18px',
+                  background: 'var(--surface)',
+                  border: `1px solid ${i === 0 ? '#1b3b42' : 'var(--border)'}`,
+                  padding: '14px 16px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 10,
+                  gap: 8,
                 }}
               >
                 <div
@@ -608,7 +595,7 @@ export function WorkspacePicker({
                     {i === 0 ? `most recent · ${formatAgo(ws.last_opened_at)}` : formatAgo(ws.last_opened_at)}
                   </div>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#888', wordBreak: 'break-all' }}>
+                <div style={{ fontSize: type.label, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {ws.folder_path}
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
@@ -864,20 +851,20 @@ function IngestSpinnerRow() {
 
 function PurposeCard({ title, body }: { title: string; body: string }) {
   return (
-    <div style={{ background: '#0f0f0f', border: '1px solid #181818', padding: '14px 16px' }}>
-      <div style={{ fontSize: '0.74rem', color: '#f0f0f0', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.55 }}>{body}</div>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '10px 12px' }}>
+      <div style={{ fontSize: type.label, color: 'var(--text)', marginBottom: 6, fontWeight: 600 }}>{title}</div>
+      <div style={{ fontSize: type.stamp, color: 'var(--text-dim)', lineHeight: 1.45 }}>{body}</div>
     </div>
   );
 }
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  background: '#0f0f0f',
-  border: '1px solid #1c1c1c',
-  color: '#eee',
-  padding: '12px 14px',
-  fontSize: '0.82rem',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
+  padding: '10px 12px',
+  fontSize: type.body,
   outline: 'none',
 };
 
@@ -886,28 +873,30 @@ function primaryButtonStyle(busy: boolean): React.CSSProperties {
     background: '#00d68f',
     color: '#041015',
     border: 'none',
-    padding: '10px 16px',
+    padding: '10px 14px',
     cursor: busy ? 'wait' : 'pointer',
-    fontSize: '0.66rem',
-    letterSpacing: '0.16em',
+    fontSize: type.stamp,
+    letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontWeight: 700,
     opacity: busy ? 0.7 : 1,
+    fontFamily: metroFont,
   };
 }
 
 function secondaryButtonStyle(busy: boolean): React.CSSProperties {
   return {
     background: 'transparent',
-    color: '#f0f0f0',
-    border: '1px solid #2c2c2c',
-    padding: '10px 16px',
+    color: 'var(--text)',
+    border: '1px solid var(--border)',
+    padding: '10px 14px',
     cursor: busy ? 'wait' : 'pointer',
-    fontSize: '0.66rem',
-    letterSpacing: '0.16em',
+    fontSize: type.stamp,
+    letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontWeight: 700,
     opacity: busy ? 0.7 : 1,
+    fontFamily: metroFont,
   };
 }
 
@@ -916,24 +905,29 @@ function dangerButtonStyle(busy: boolean): React.CSSProperties {
     background: 'transparent',
     color: '#e74c9b',
     border: '1px solid #3a1a2a',
-    padding: '10px 16px',
+    padding: '10px 14px',
     cursor: busy ? 'wait' : 'pointer',
-    fontSize: '0.66rem',
-    letterSpacing: '0.16em',
+    fontSize: type.stamp,
+    letterSpacing: '0.12em',
     textTransform: 'uppercase',
     fontWeight: 700,
     opacity: busy ? 0.7 : 1,
+    fontFamily: metroFont,
   };
 }
 
 function formatAgo(ts: number | null): string {
   if (!ts) return 'never opened';
-  const secs = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  const ms = ts < 10_000_000_000 ? ts * 1000 : ts;
+  const diff = Date.now() - ms;
+  if (diff < 0) return 'just now';
+  const secs = Math.max(1, Math.floor(diff / 1000));
   if (secs < 60) return `${secs}s ago`;
   const mins = Math.floor(secs / 60);
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
   return `${days}d ago`;
 }

@@ -7,8 +7,7 @@ import path from 'node:path';
 // user's own machine (dev server or Tauri sidecar on 127.0.0.1). We only
 // list directory entries — never file contents — so the worst a rogue
 // request can do is enumerate folder names, which any local user process
-// could already do. In the bundled desktop build the native folder picker
-// is preferred and this endpoint becomes a fallback.
+// could already do. The workspace picker uses this for the in-app browse UI.
 
 interface Entry {
   name: string;

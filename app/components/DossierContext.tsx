@@ -114,6 +114,29 @@ function loadBranches(workspaceId: string | null): BranchStore {
   }
 }
 
+function coerceBranchStore(value: unknown): BranchStore | null {
+  if (!value || typeof value !== 'object') return null;
+  const data = value as { branches?: unknown; activeBranchId?: unknown };
+  if (!Array.isArray(data.branches) || data.branches.length === 0) return null;
+  const branches = data.branches.filter((branch): branch is BranchRecord => {
+    if (!branch || typeof branch !== 'object') return false;
+    const item = branch as Partial<BranchRecord>;
+    return (
+      typeof item.id === 'string' &&
+      typeof item.label === 'string' &&
+      typeof item.rootSlug === 'string' &&
+      typeof item.currentSlug === 'string' &&
+      Array.isArray(item.path)
+    );
+  });
+  if (branches.length === 0) return null;
+  const activeBranchId =
+    typeof data.activeBranchId === 'string' && branches.some((branch) => branch.id === data.activeBranchId)
+      ? data.activeBranchId
+      : branches[0]?.id ?? null;
+  return { schemaVersion: 2, branches, activeBranchId };
+}
+
 function saveMode(mode: SynthesisMode, workspaceId: string | null) {
   if (typeof window !== 'undefined') {
     window.localStorage.setItem(modeKey(workspaceId), mode);
@@ -161,8 +184,10 @@ export function DossierProvider({ children }: { children: ReactNode }) {
     branches: [],
     activeBranchId: null,
   });
+  const [branchStoreReady, setBranchStoreReady] = useState(false);
 
   useEffect(() => {
+    setBranchStoreReady(false);
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(LEGACY_BRANCH_KEY);
     }
@@ -171,6 +196,32 @@ export function DossierProvider({ children }: { children: ReactNode }) {
     setBranchStore(store);
     setDocId(null);
     setConceptSlug(conceptSlugToRestoreFromStore(store));
+    if (store.branches.length > 0) {
+      setBranchStoreReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    fetch('/api/dossier/branches', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const seeded = coerceBranchStore(data);
+        if (seeded) {
+          setBranchStore(seeded);
+          setConceptSlug(conceptSlugToRestoreFromStore(seeded));
+          saveBranches(seeded, workspaceId);
+        }
+      })
+      .catch(() => {
+        /* persisted branches are optional */
+      })
+      .finally(() => {
+        if (!cancelled) setBranchStoreReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [workspaceId]);
 
   useEffect(() => {
@@ -209,8 +260,19 @@ export function DossierProvider({ children }: { children: ReactNode }) {
   }, [synthesisMode, workspaceId]);
 
   useEffect(() => {
+    if (!branchStoreReady) return;
     saveBranches(branchStore, workspaceId);
-  }, [branchStore, workspaceId]);
+    void fetch('/api/dossier/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        branches: branchStore.branches,
+        activeBranchId: branchStore.activeBranchId,
+      }),
+    }).catch(() => {
+      /* localStorage remains the immediate fallback */
+    });
+  }, [branchStore, workspaceId, branchStoreReady]);
 
   const activeBranch = useMemo(
     () => branchStore.branches.find((branch) => branch.id === branchStore.activeBranchId) ?? null,

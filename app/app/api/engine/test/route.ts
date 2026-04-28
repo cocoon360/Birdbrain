@@ -16,11 +16,12 @@ interface TestBody {
 
 function resolveEngineConfigForTest(body: TestBody) {
   const meta = getProjectMeta();
-  const rawProvider = (body.provider ?? meta.engine_provider ?? 'cursor-cli').trim();
-  const provider: EngineProvider = isEngineProvider(rawProvider) ? rawProvider : 'cursor-cli';
+  const rawProvider = (body.provider ?? meta.engine_provider ?? 'local').trim();
+  const provider: EngineProvider = isEngineProvider(rawProvider) ? rawProvider : 'local';
 
   const hasExplicitModel = typeof body.model === 'string' && body.model.trim().length > 0;
-  const model = hasExplicitModel ? body.model!.trim() : meta.engine_model?.trim() || null;
+  const rawModel = hasExplicitModel ? body.model!.trim() : meta.engine_model?.trim() || null;
+  const model = !rawModel || rawModel === 'no-ai' || provider === 'local' ? null : rawModel;
 
   const hasExplicitEndpoint = typeof body.endpoint === 'string' && body.endpoint.trim().length > 0;
   const endpoint = hasExplicitEndpoint ? body.endpoint!.trim() : meta.engine_endpoint?.trim() || null;
@@ -35,7 +36,7 @@ function resolveEngineConfigForTest(body: TestBody) {
 }
 
 export async function POST(req: NextRequest) {
-  return withWorkspaceRoute(req, async () => {
+  return withWorkspaceRoute(req, async (ctx) => {
     let body: TestBody = {};
     try {
       body = (await req.json()) as TestBody;
@@ -44,6 +45,16 @@ export async function POST(req: NextRequest) {
     }
 
     const merged = resolveEngineConfigForTest(body);
+    if (merged.provider === 'local' && ctx.id !== 'demo_mode') {
+      return NextResponse.json(
+        {
+          ok: false,
+          provider: 'local',
+          message: 'Demo mode is only available for the bundled Demo Mode workspace.',
+        },
+        { status: 403 }
+      );
+    }
     const engine = buildEngine(merged);
 
     if (!engine.test) {

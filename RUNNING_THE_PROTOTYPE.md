@@ -21,7 +21,7 @@ server as a "sidecar" process that the Tauri window talks to.
 | npm      | 10+        | Ships with Node.js.                          |
 | Rust     | stable     | Only needed for the desktop build.           |
 | Xcode CLT (macOS) / VS Build Tools (Windows) / `build-essential` (Linux) | — | Native compile deps for Tauri + better-sqlite3. |
-| Cursor CLI *(optional)* | latest | Default LLM engine. Not required; you can switch to OpenAI, Anthropic, or local Ollama from inside the app. |
+| Cursor CLI *(optional)* | latest | Optional AI engine. The bundled Demo Mode workspace works without an AI login or API key. |
 
 Install Rust once via [rustup](https://rustup.rs/). Install Tauri's CLI
 globally *or* use `npx` (the repo does not ship it by default):
@@ -183,8 +183,8 @@ This writes `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, and
 
 From the workspace picker:
 
-1. Click **Add Folder**. In the desktop app this opens an OS-native folder
-   picker via `tauri-plugin-dialog`; in the web preview it's a text field.
+1. **Browse** to pick a folder (in-app file tree) or paste a path; desktop
+   and web use the same chooser.
 2. Bird Brain ingests the folder into its own SQLite database. The first
    ingest may take a minute for large archives.
 3. Click **Open in new window** to launch that workspace in its own native
@@ -202,9 +202,10 @@ ingest + ontology pipeline runs.
 
 ## 5. Troubleshooting
 
-- **"Engine not configured" on startup.** Open the gear icon and set a
-  provider. Default is Cursor CLI (no key needed); the app will fall back
-  to retrieval-only briefs when nothing is configured.
+- **"Engine not configured" on startup.** Open the bundled **Demo Mode**
+  workspace for a model-free tour, or open the engine drawer and configure
+  Cursor CLI, OpenAI, Anthropic, or Ollama for generated overview/brief passes
+  in your own workspace.
 - **Sidecar log says `node: command not found`.** Install Node.js 20+ or
   set `BIRDBRAIN_NODE=/abs/path/to/node` before launching the app.
 - **`better-sqlite3` load error.** Re-run `npm install` inside `app/` on
@@ -229,7 +230,7 @@ birdbrain/
 │   ├── lib/workspaces/   # Registry + AsyncLocalStorage context
 │   └── scripts/          # ingest.ts, pack-sidecar.mjs
 ├── src-tauri/            # Rust desktop shell
-│   ├── src/commands/     # IPC: folder picker, keychain, open window
+│   ├── src/commands/     # IPC: keychain, open window
 │   ├── src/sidecar.rs    # Spawns node <resource>/sidecar/server.js
 │   └── tauri.conf.json   # Bundles bundle/sidecar → resources/sidecar
 └── RUNNING_THE_PROTOTYPE.md   # this file

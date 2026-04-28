@@ -46,6 +46,17 @@ export async function synthesizePrecontextForSlug(slug: string): Promise<Precont
   const overview = getOverviewSnapshot();
   const evidence = getEntityMentions(slug, 5);
   const related = getRelatedEntities(slug, 6);
+  if (meta.engine_provider === 'local') {
+    return synthesizeLocalPrecontext({
+      slug,
+      entity,
+      meta,
+      corpusSignature,
+      evidence,
+      related,
+      overview,
+    });
+  }
   const prompt = buildPrecontextPrompt({
     projectName: meta.project_name,
     guidanceNotes: meta.guidance_notes,
@@ -119,6 +130,60 @@ export async function synthesizePrecontextForSlug(slug: string): Promise<Precont
       precontext_text: precontextText,
       generator: engine.provider,
       model: model ?? null,
+      generated_at: Math.floor(Date.now() / 1000),
+    }
+  );
+}
+
+function synthesizeLocalPrecontext(input: {
+  slug: string;
+  entity: NonNullable<ReturnType<typeof getEntityBySlug>>;
+  meta: ReturnType<typeof getProjectMeta>;
+  corpusSignature: string;
+  evidence: ReturnType<typeof getEntityMentions>;
+  related: ReturnType<typeof getRelatedEntities>;
+  overview: OverviewSnapshot;
+}): PrecontextResult {
+  const { slug, entity, meta, corpusSignature, evidence, related, overview } = input;
+  const firstSnippet = evidence[0]?.body.replace(/\s+/g, ' ').trim();
+  const plainDefinition =
+    cleanSentence(entity.summary) ||
+    (firstSnippet ? cleanSentence(firstSnippet) : '') ||
+    `${entity.name} is a recurring ${entity.type} in ${meta.project_name}.`;
+  const projectRole =
+    evidence.length > 0
+      ? `${entity.name} is grounded in ${evidence.length} source passage${evidence.length === 1 ? '' : 's'} from the ingested folder.`
+      : `${entity.name} appears in the local concept map for ${meta.project_name}.`;
+  const studyRelevance =
+    related.length > 0
+      ? `${entity.name} connects to ${related.slice(0, 3).map((row) => row.name).join(', ')}.`
+      : overview.project_summary || `${entity.name} helps orient the project archive.`;
+  const relatedConcepts = related.slice(0, 4).map((row) => row.slug);
+  const precontextText = [plainDefinition, projectRole, studyRelevance].filter(Boolean).join(' ');
+
+  upsertPrecontext({
+    entityId: entity.id,
+    corpusSignature,
+    plainDefinition,
+    projectRole,
+    studyRelevance,
+    relatedConcepts,
+    precontextText,
+    generator: 'local',
+    model: 'no-ai',
+  });
+
+  return (
+    getPrecontextForSlug(slug) ?? {
+      entity_id: entity.id,
+      corpus_signature: corpusSignature,
+      plain_definition: plainDefinition,
+      project_role: projectRole,
+      study_relevance: studyRelevance,
+      related_concepts: relatedConcepts,
+      precontext_text: precontextText,
+      generator: 'local',
+      model: 'no-ai',
       generated_at: Math.floor(Date.now() / 1000),
     }
   );

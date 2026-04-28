@@ -1,5 +1,5 @@
 import { WorkspacePicker } from '@/components/WorkspacePicker';
-import { adoptLegacyWorkspace, listWorkspaces } from '@/lib/workspaces/registry';
+import { adoptLegacyWorkspace, ensureDemoModeWorkspace, listWorkspaces } from '@/lib/workspaces/registry';
 
 // Root route is the workspace picker. It lists known workspaces, lets the
 // user add a new folder, and sends them to /w/[workspaceId] once they open
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export default function Home() {
   adoptLegacyWorkspace();
+  ensureDemoModeWorkspace();
   const workspaces = listWorkspaces();
   return <WorkspacePicker initialWorkspaces={workspaces} />;
 }

@@ -4,15 +4,16 @@ import { CursorCliEngine } from './cursor-cli';
 import { OpenAIEngine } from './openai';
 import { AnthropicEngine } from './anthropic';
 import { OllamaEngine } from './ollama';
+import { LocalEngine } from './local';
 
 // Engine factory + cached resolver. The active engine is stored in
 // project_meta (per workspace) and built on demand. Cache is keyed by the
 // full config so switching providers at runtime produces a fresh adapter.
 
 export * from './types';
-export { CursorCliEngine, OpenAIEngine, AnthropicEngine, OllamaEngine };
+export { CursorCliEngine, OpenAIEngine, AnthropicEngine, OllamaEngine, LocalEngine };
 
-const VALID_PROVIDERS: EngineProvider[] = ['cursor-cli', 'openai', 'anthropic', 'ollama'];
+const VALID_PROVIDERS: EngineProvider[] = ['local', 'cursor-cli', 'openai', 'anthropic', 'ollama'];
 
 export function isEngineProvider(value: string): value is EngineProvider {
   return (VALID_PROVIDERS as string[]).includes(value);
@@ -20,6 +21,8 @@ export function isEngineProvider(value: string): value is EngineProvider {
 
 export function buildEngine(config: EngineConfig): Engine {
   switch (config.provider) {
+    case 'local':
+      return new LocalEngine();
     case 'cursor-cli':
       return new CursorCliEngine(config);
     case 'openai':
@@ -46,7 +49,7 @@ export function getEngineForWorkspace(): Engine {
   const meta = getProjectMeta();
   const provider: EngineProvider = isEngineProvider(meta.engine_provider)
     ? meta.engine_provider
-    : 'cursor-cli';
+    : 'local';
   const config: EngineConfig = {
     provider,
     model: meta.engine_model || null,
@@ -65,7 +68,7 @@ export function updateWorkspaceEngineConfig(partial: Partial<EngineConfig>) {
   const meta = getProjectMeta();
   const nextProvider: EngineProvider = partial.provider && isEngineProvider(partial.provider)
     ? partial.provider
-    : (isEngineProvider(meta.engine_provider) ? meta.engine_provider : 'cursor-cli');
+    : (isEngineProvider(meta.engine_provider) ? meta.engine_provider : 'local');
   const next: EngineConfig = {
     provider: nextProvider,
     model: partial.model ?? meta.engine_model ?? null,

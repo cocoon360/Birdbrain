@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   addWorkspace,
   adoptLegacyWorkspace,
+  ensureDemoModeWorkspace,
   listWorkspaces,
   removeWorkspace,
   renameWorkspace,
@@ -12,6 +13,7 @@ import {
 // user opens the UI after upgrading, their existing DB becomes a workspace.
 export async function GET() {
   adoptLegacyWorkspace();
+  ensureDemoModeWorkspace();
   return NextResponse.json({ workspaces: listWorkspaces() });
 }
 

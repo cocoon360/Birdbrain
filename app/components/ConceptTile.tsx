@@ -31,10 +31,10 @@ export function ConceptTile({
 
   const dims =
     size === 'lg'
-      ? { minHeight: 160, padding: '18px 20px', titleSize: '1.3rem' }
+      ? { minHeight: 140, padding: '16px 18px', titleSize: '1.18rem' }
       : size === 'sm'
         ? { minHeight: 80, padding: '10px 12px', titleSize: '0.82rem' }
-        : { minHeight: 120, padding: '14px 16px', titleSize: '1rem' };
+        : { minHeight: 108, padding: '12px 14px', titleSize: '0.95rem' };
 
   return (
     <button
@@ -85,12 +85,12 @@ export function ConceptTile({
           {name}
         </div>
         {size !== 'sm' && summary && (
-          <div style={{ fontSize: '0.7rem', color: '#666', lineHeight: 1.4 }}>{summary}</div>
+          <div style={{ fontSize: '0.68rem', color: '#666', lineHeight: 1.35 }}>{summary}</div>
         )}
       </div>
 
       {size !== 'sm' && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center' }}>
           <Pill label="MENTIONS" value={mention_count} color="#888" />
           <Pill label="PRIMARY" value={canon_docs} color={STATUS_COLORS.canon} muted={canon_docs === 0} />
           <Pill label="WORK" value={working_docs} color={STATUS_COLORS.working} muted={working_docs === 0} />

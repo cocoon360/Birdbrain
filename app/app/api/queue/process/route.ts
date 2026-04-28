@@ -5,6 +5,7 @@ import {
   markQueuePending,
   getQueueStats,
   getStartupStatus,
+  getProjectMeta,
 } from '@/lib/db/queries';
 import { synthesizeForSlug } from '@/lib/ai/synthesize';
 import { withWorkspaceRoute } from '@/lib/workspaces/route';
@@ -13,7 +14,7 @@ export const maxDuration = 180;
 
 export async function POST(req: NextRequest) {
   return withWorkspaceRoute(req, async () => {
-    if (!getStartupStatus().ready) {
+    if (!getStartupStatus().ready && getProjectMeta().engine_provider !== 'local') {
       return NextResponse.json(
         { processed: 0, claimed: 0, queue: getQueueStats('queued'), blocked: true },
         { status: 409 }

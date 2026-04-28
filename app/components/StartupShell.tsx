@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDossier } from './DossierContext';
+import { EngineSettingsDrawer } from './EngineSettingsDrawer';
 import { RobotBirdLogo } from './RobotBirdLogo';
 import { useWorkspace } from './WorkspaceProvider';
 import { metroFont, space, type } from '@/lib/ui/metro-theme';
 
 export type StartupMode = 'automatic-cached' | 'always-fresh' | 'manual';
+type RunMode = 'local' | 'ai';
 
 /** Mirrors `getCorpusStats()` from the startup status API (client-safe subset). */
 interface CorpusStatsPayload {
@@ -58,6 +60,17 @@ const MODE_COPY: Record<StartupMode, { title: string; description: string }> = {
   },
 };
 
+const RUN_MODE_COPY: Record<RunMode, { title: string; description: string }> = {
+  local: {
+    title: 'Demo mode',
+    description: 'Click around pregenerated material: some links work, some show branches, and some mark where the full configured version begins.',
+  },
+  ai: {
+    title: 'Configure AI',
+    description: 'Use Cursor CLI, Ollama, OpenAI, or Anthropic for richer project maps and generated dossiers.',
+  },
+};
+
 export function StartupShell({
   onEnter,
   initialMode = 'automatic-cached',
@@ -82,6 +95,11 @@ export function StartupShell({
   const [ingesting, setIngesting] = useState(false);
   /** First load (or workspace switch) until the status request settles. */
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [runMode, setRunMode] = useState<RunMode>('ai');
+  const [savingRunMode, setSavingRunMode] = useState(false);
+  const [engineOpen, setEngineOpen] = useState(false);
+  const isDemoWorkspace = workspace.id === 'demo_mode';
+  const runModeOptions: RunMode[] = isDemoWorkspace ? ['local', 'ai'] : ['ai'];
 
   const fetchStartupStatus = useCallback(
     async (opts?: { signal?: AbortSignal }): Promise<StartupStatusPayload | null> => {
@@ -136,12 +154,72 @@ export function StartupShell({
     return () => ac.abort();
   }, [workspace.id, fetchStartupStatus, initialMode]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/engine', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data: { provider?: string }) => {
+        if (cancelled) return;
+        setRunMode(data.provider === 'local' && isDemoWorkspace ? 'local' : 'ai');
+      })
+      .catch(() => {
+        if (!cancelled) setRunMode(isDemoWorkspace ? 'local' : 'ai');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace.id, isDemoWorkspace]);
+
+  useEffect(() => {
+    if (!status?.status?.running || busy) return;
+    const timer = window.setInterval(() => {
+      void fetchStartupStatus();
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [status?.status?.running, busy, fetchStartupStatus]);
+
   const canEnter = Boolean(status?.status?.ready);
   const blocked = Boolean(status && status.status && !status.status.ready);
   const summary = status?.status?.latest_run?.summary_text;
 
   async function refreshStatus() {
     return fetchStartupStatus();
+  }
+
+  async function saveLocalRunMode() {
+    if (!isDemoWorkspace) {
+      setRunMode('ai');
+      setMessage('Demo mode is only available in the bundled Demo Mode workspace.');
+      return;
+    }
+    const next: RunMode = 'local';
+    setRunMode(next);
+    setSavingRunMode(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/engine', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'local' }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setMessage(body?.error ?? 'Could not save run mode.');
+        return;
+      }
+      await refreshStatus();
+    } finally {
+      setSavingRunMode(false);
+    }
+  }
+
+  async function enterReaderMode() {
+    resetSession();
+    if (runMode === 'local' && isDemoWorkspace) {
+      const next = await rebuild(false);
+      if (!next?.status?.ready && !corpusIngestedOk) return;
+    }
+    onEnter();
   }
 
   async function runCorpusIngest(includeCode = true) {
@@ -194,6 +272,10 @@ export function StartupShell({
       let next = status ?? (await refreshStatus());
       if (!next?.status) {
         setMessage('Startup status did not load. Use retry above or switch workspace.');
+        return;
+      }
+      if (next.status.running) {
+        setMessage('Project map is already building. This screen will refresh when it finishes.');
         return;
       }
       if (mode === 'automatic-cached' && (next.status.missing || next.status.stale || next.status.failed)) {
@@ -257,6 +339,7 @@ export function StartupShell({
     const docs = status.stats?.total_docs ?? 0;
     return Boolean(sig && docs > 0);
   }, [status]);
+  const canEnterDegraded = corpusIngestedOk && !canEnter;
 
   const corpusDetail = useMemo(() => {
     if (!status?.status) return null;
@@ -283,6 +366,7 @@ export function StartupShell({
   return (
     <div
       style={{
+        height: '100vh',
         minHeight: '100vh',
         maxHeight: '100vh',
         width: '100vw',
@@ -290,30 +374,33 @@ export function StartupShell({
         color: 'var(--text)',
         display: 'flex',
         alignItems: 'stretch',
-        overflowY: 'auto',
+        overflow: 'hidden',
         fontFamily: metroFont,
       }}
       className="thin-scrollbar"
     >
       <div
         style={{
-          width: '58%',
-          padding: `${space.xxl + 8}px ${space.hub}px ${space.xxl}px`,
+          flex: '0 0 min(56vw, 740px)',
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: `${space.xl}px ${space.hub}px`,
           borderRight: '1px solid var(--border)',
         }}
+        className="thin-scrollbar"
       >
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: space.lg,
+            marginBottom: space.md,
             borderBottom: '1px solid var(--border)',
             paddingBottom: space.sm,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
-            <RobotBirdLogo size={40} />
+            <RobotBirdLogo size={32} />
             <div className="metro-subtitle" style={{ color: 'var(--accent)' }}>
               {workspaceName ? `bird brain · ${workspaceName.toLowerCase()}` : 'bird brain startup'}
             </div>
@@ -338,29 +425,72 @@ export function StartupShell({
             </button>
           )}
         </div>
-        <h1 className="metro-title" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)' }}>
-          begin
-          <br />
-          again
+        <h1 className="metro-title" style={{ fontSize: 'clamp(2.35rem, 5vw, 3.4rem)' }}>
+          begin again
         </h1>
-        <p className="metro-lead" style={{ marginTop: space.lg, maxWidth: 620 }}>
-          Bird Brain starts by building a project map from the folder. That map serves
-          three jobs at once: it briefs active builders, explains the project to newcomers, and
-          demonstrates the product pattern as a reusable project-intelligence console.
+        <p className="metro-lead" style={{ marginTop: space.md, maxWidth: 620 }}>
+          Build or reuse this workspace’s project map, choose how much AI to use, then enter the
+          panorama.
         </p>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: space.md,
-            marginTop: space.xl,
-          }}
-        >
-          <PurposeCard title="For Builders" body="Clarify what matters now, what changed, and which concepts deserve active attention." />
-          <PurposeCard title="For Newcomers" body="Define ideas plainly before assuming any prior familiarity or internal shorthand with this project." />
-          <PurposeCard title="For Product" body="Show Bird Brain as a portable way to transform a messy project folder into interactive understanding." />
+        <div style={{ marginTop: space.lg }}>
+          <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
+            run mode
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                runModeOptions.length > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+              gap: space.sm,
+            }}
+          >
+            {runModeOptions.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => (key === 'local' ? void saveLocalRunMode() : setEngineOpen(true))}
+                disabled={savingRunMode}
+                className="metro-surface"
+                style={{
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  cursor: savingRunMode ? 'wait' : 'pointer',
+                  borderColor:
+                    runMode === key
+                      ? 'var(--status-canon)'
+                      : key === 'ai'
+                        ? 'rgba(231, 76, 155, 0.55)'
+                        : 'var(--border)',
+                  background:
+                    key === 'ai' && runMode !== key
+                      ? 'rgba(231, 76, 155, 0.055)'
+                      : undefined,
+                  minHeight: 92,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color:
+                      runMode === key
+                        ? 'var(--status-canon)'
+                        : key === 'ai'
+                          ? '#e74c9b'
+                          : 'var(--text)',
+                    marginBottom: 6,
+                  }}
+                >
+                  {RUN_MODE_COPY[key].title}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+                  {RUN_MODE_COPY[key].description}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ marginTop: space.xxl }}>
+        <div style={{ marginTop: space.lg }}>
           <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
             startup mode
           </div>
@@ -377,12 +507,12 @@ export function StartupShell({
                     fontSize: type.body,
                     fontWeight: 600,
                     color: mode === key ? 'var(--accent)' : 'var(--text)',
-                    marginBottom: 6,
+                    marginBottom: 4,
                   }}
                 >
                   {MODE_COPY[key].title}
                 </div>
-                <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.42 }}>
                   {MODE_COPY[key].description}
                 </div>
               </button>
@@ -391,7 +521,18 @@ export function StartupShell({
         </div>
       </div>
 
-      <div style={{ flex: 1, padding: `${space.xxl + 8}px ${space.xl}px ${space.xxl}px`, display: 'flex', flexDirection: 'column' }}>
+      <div
+        className="thin-scrollbar"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: `${space.xl}px`,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <div
           className="metro-subtitle"
           style={{
@@ -436,10 +577,10 @@ export function StartupShell({
             </div>
           </div>
         )}
-        <div style={{ fontSize: type.lead, color: 'var(--text)', lineHeight: 1.45, marginBottom: 10 }}>
+        <div style={{ fontSize: type.lead, color: 'var(--text)', lineHeight: 1.35, marginBottom: 8 }}>
           {status?.meta?.project_name ?? workspaceName ?? 'Bird Brain'}
         </div>
-        <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: space.lg }}>
+        <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: space.md }}>
           {bootstrapping
             ? 'Connecting to this workspace’s database and checking the last project map…'
             : summary ||
@@ -451,7 +592,7 @@ export function StartupShell({
           </div>
         )}
 
-        <div className="metro-surface" style={{ padding: '16px 18px', marginBottom: space.lg }}>
+        <div className="metro-surface" style={{ padding: '14px 16px', marginBottom: space.md }}>
           <div className="metro-subtitle" style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
             startup checks
           </div>
@@ -468,12 +609,12 @@ export function StartupShell({
               <ChecklistRow label="Folder scanned" ok={corpusIngestedOk} />
               <ChecklistRow label="Project map ready" ok={Boolean(status.status.ready)} />
               <ChecklistRow label="Project map stale" ok={Boolean(status.status.stale)} invert />
-              <ChecklistRow label="Last run failed" ok={!status.status.failed} />
+              <ChecklistRow label="Last run succeeded" ok={!status.status.failed} />
               {corpusDetail && (
                 <div
                   style={{
-                    marginTop: 12,
-                    paddingTop: 12,
+                    marginTop: 10,
+                    paddingTop: 10,
                     borderTop: '1px solid var(--border)',
                     fontSize: 13,
                     color: 'var(--text-muted)',
@@ -508,6 +649,31 @@ export function StartupShell({
           >
             {bootstrapping ? 'loading…' : busy ? 'working…' : canEnter ? 'enter' : 'build overview'}
           </button>
+          {canEnterDegraded && (
+            <button
+              type="button"
+              onClick={() => {
+                void enterReaderMode();
+              }}
+              disabled={busy || ingesting || bootstrapping}
+              title="Enter with local search, files, and derived concepts while the AI project map is unavailable."
+              style={{
+                background: 'transparent',
+                color: 'var(--status-canon)',
+                border: '1px solid var(--status-canon)',
+                padding: '12px 20px',
+                cursor: busy || ingesting || bootstrapping ? 'wait' : 'pointer',
+                fontSize: type.stamp,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+                opacity: busy || ingesting || bootstrapping ? 0.7 : 1,
+                fontFamily: metroFont,
+              }}
+            >
+              enter reader mode
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void runCorpusIngest(false)}
@@ -585,15 +751,14 @@ export function StartupShell({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function PurposeCard({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="metro-surface" style={{ padding: '14px 16px' }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 14, color: 'var(--text-dim)', lineHeight: 1.55 }}>{body}</div>
+      <EngineSettingsDrawer
+        open={engineOpen}
+        onClose={() => setEngineOpen(false)}
+        onSaved={(next) => {
+          setRunMode(next.provider === 'local' ? 'local' : 'ai');
+          void refreshStatus();
+        }}
+      />
     </div>
   );
 }

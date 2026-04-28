@@ -1,9 +1,8 @@
 # Bird Brain
 
-> A small local-first generative hypertext project journal. Point it at a
-> project folder and it builds its own concept map, then lets you walk that map
-> like a branching dialogue tree in a video game. Every generated
-> paragraph is itself clickable within the 2010's-inspired metro UI.
+> A local-first hypertext project reader. Point it at a project folder, let it
+> build a concept map, then walk that map like a branching dialogue tree in a
+> video game. Every brief is clickable inside a 2010s-inspired metro UI.
 
 **Bird Brain turns folders of text and code files into a generative
 hypertext concept map for active work and research synthesis instead of
@@ -55,6 +54,96 @@ Bird Brain is designed to help you experience project files through a fresh lens
 
 ---
 
+## How it works (the short version)
+
+```mermaid
+flowchart TD
+    A[Your folder] --> B[Bird Brain reads the files]
+    B --> C[Builds a starter concept map]
+    C --> D[You click a concept]
+    D --> E[Opens a grounded linked brief]
+    E --> F[Page phrases become clickable]
+    F -->|Known concept| D
+    F -->|New phrase| G[New concept joins the map]
+    G --> C
+    E --> H[Journal notes what you keep circling]
+    H -.-> C
+
+    style A fill:#f4f0e8,stroke:#8a7f6a,color:#2a2a2a
+    style G fill:#e8f0f4,stroke:#6a8799,color:#2a2a2a
+    style H fill:#f4e8ee,stroke:#996a81,color:#2a2a2a
+```
+
+
+
+**The short read:** a folder goes in, a living map of concepts comes out.
+The map grows from what you click. Briefs are grounded in the actual files, not
+the model's general knowledge.
+
+### Under the hood: ingest → overview → linked brief
+
+Your project folder is only **read**; app state (SQLite, registry) lives in
+`data/`, not inside the source tree. Ingest stores documents and chunks, startup
+builds an overview plus starter lenses, and opening a concept uses a cached
+**precontext** as the spine for the default linked brief. The full dossier
+rewrite path is still available from the dossier engine toggle when you want a
+heavier synthesis pass.
+
+```mermaid
+flowchart TB
+  folder[Project folder]
+  ingest[Ingest readable files and code]
+  projectMap[Project map and starter topics]
+  concept[User opens concept]
+  precontext[Cached precontext for this topic]
+  linked[Default linked brief]
+  dossier[Optional full dossier rewrite]
+  cache[Cache output by corpus signature]
+  ui[Display dossier drawer]
+
+  folder --> ingest
+  ingest --> projectMap
+  projectMap --> concept
+  concept --> precontext
+  precontext --> linked
+  precontext --> dossier
+  linked --> cache
+  dossier --> cache
+  cache --> ui
+```
+
+
+
+Everything is local by default. The files, cached briefs, and map of concepts
+live on your machine. Text only leaves the machine if you configure a remote AI
+provider such as Cursor CLI, OpenAI, or Anthropic. Demo Mode and Ollama
+keep the loop offline.
+
+Bird Brain's own workspace databases and registry live under the repo's
+`data/` folder by default (`data/workspaces.json` + `data/workspace-dbs/`).
+Set `BIRDBRAIN_DATA_DIR` if you want that metadata somewhere else; older
+installs may still have a legacy `~/.birdbrain/` folder that gets merged in
+on first launch.
+
+---
+
+## Data model (today)
+
+
+| Table                                                   | Role                                                               |
+| ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `documents`, `chunks`                                   | Raw corpus + heading-delimited chunks                              |
+| `chunks_fts`                                            | FTS5 mirror for lexical retrieval                                  |
+| `entities`, `entity_mentions`                           | Seeded + emerged concepts and their per-chunk mentions             |
+| `concept_synthesis`                                     | Cached hypertextual paragraphs (live + queued profiles)            |
+| `synthesis_queue`                                       | Background work list for queued synthesis                          |
+| `ontology_runs`, `ontology_concepts`, `ontology_lenses` | LLM-assisted ontology overview                                     |
+| `concept_precontext_cache`                              | Bird's-eye precontext per concept, invalidated by corpus signature |
+| `participation_sessions`, `participation_events`        | Live click/read trail that feeds the memesis loop                  |
+| `project_meta`                                          | Project name + engine config + guidance notes                      |
+
+---
+
 ## What ships today
 
 Everything below runs locally against the current branch.
@@ -87,6 +176,9 @@ shortlist of newest-per-provider plus a "show all" toggle.
 - **Desktop app.** A Tauri wrapper ships as a native macOS build. The
 web version is still fine for dev work, but the desktop app is the
 shape it's easiest to be used in.
+- **Bundled demo workspace.** Packaged builds include a prebuilt **Bird Brain
+Demo** workspace with cached linked briefs, so users can explore concepts and
+dossiers before configuring AI.
 - **Export.** Copy the generated dossier **paragraph** as plain text to clipboard.
 - **Possible evidence conflicts (v1).** Sometimes two passages about the same
 concept *sound* like they’re saying opposite things (for example, one file
@@ -114,133 +206,67 @@ but is still more log than journal; a copy pass wouldn't hurt.
 - **Deeper conflict detection.** Beyond the narrow v1 regex rules, there is
 no general analysis that arbitrary facts, dates, or claims across files
 contradict each other.
-- **Clear loading & processing stages.** The app's feedback for ingest, indexing, and page generation is still too minimal. Making the stages and background processing more visible is an area for improvement, so users always know what has finished processing and what is still in progress, instead of being left guessing.
+- **Long overview builds can still feel quiet.** The app now recovers stale
+interrupted overview runs, but progress feedback for multi-pass AI overview
+generation can still be clearer.
 
 ---
 
 ## Quick start
 
+### 1. Install prerequisites
+
+Install **Node.js 20 or 22**. npm 10+ ships with Node.js, and the prototype
+will not run without Node/npm.
+
+### 2. Start the browser prototype
+
+From the birdbrain repo folder root:
+
 ```bash
 cd app
 npm install
-
-npm run dev        # http://localhost:3000 —> pick a workspace folder in the UI
-
-# Optional CLI ingest (defaults to the tiny tracked fixtures/smoke-corpus/):
-# DOCS_PATH=/absolute/path/to/your/project/folder npm run ingest
+npm run dev
 ```
 
-For live page generation, install the Cursor Agent CLI and run
-`cursor-agent login`. If you'd rather use a different provider, the
-background queue works the same way once you wire an adapter under
-`app/lib/engine/`.
+Then open <http://localhost:3000>. You should see the workspace picker.
 
-Desktop (Tauri) build: `[RUNNING_THE_PROTOTYPE.md](RUNNING_THE_PROTOTYPE.md)`.
+### 3. Create your first workspace
 
----
+1. Choose **Begin a new project**.
+2. Click **browse** (or paste an absolute folder path).
+3. Pick a folder with readable files for Bird Brain to ingest.
+4. Leave **include source code** on if you also want code files indexed.
+5. After ingest, choose **Demo mode** for exploring the demo material, or
+   choose **Configure AI** to use Cursor CLI, OpenAI, Anthropic, or Ollama.
+6. Click **build overview** or **enter**. You should land in the Hub when the
+   overview is ready.
 
-## How it works (the short version)
+Demo Mode is only available inside the bundled **Demo Mode** workspace. It is a
+guided, partial tour of pregenerated material: some concepts open fully linked
+briefs so you can click around and find usable links; some show how branch
+trails work in the Journal. Other links intentionally stop at a placeholder
+that says to use API config with your own project materials; that boundary
+shows where the demo ends and the full configured version begins.
 
-```mermaid
-flowchart TD
-    A[Your folder] --> B[Bird Brain reads the files]
-    B --> C[Builds a starter concept map]
-    C --> D[You click a concept]
-    D --> E[Writes a grounded page]
-    E --> F[Page phrases become clickable]
-    F -->|Known concept| D
-    F -->|New phrase| G[New concept joins the map]
-    G --> C
-    E --> H[Journal notes what you keep circling]
-    H -.-> C
+### Optional AI setup
 
-    style A fill:#f4f0e8,stroke:#8a7f6a,color:#2a2a2a
-    style G fill:#e8f0f4,stroke:#6a8799,color:#2a2a2a
-    style H fill:#f4e8ee,stroke:#996a81,color:#2a2a2a
+To use the Cursor CLI for AI features, make sure you have it installed and are logged in:
+
+```bash
+# Install (if you haven't)
+npm install -g @cursorai/cli
+
+# Log in (no API key required; follow prompts)
+cursor-agent login
 ```
 
+Once logged in, select Cursor CLI in the engine drawer. API-key providers can
+use the engine drawer, environment variables (`OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`), or the desktop keychain path.
 
-
-**The short read:** a folder goes in, a living map of concepts comes out.
-The map grows from what you click. The pages are generated on demand
-from the actual files, not from the model's general knowledge.
-
-### Under the hood: brief → evidence → dossier
-
-Your project folder is only **read**; app state (SQLite, registry) lives in
-`data/`, not inside the source tree. When you open a concept, the engine
-builds a **brief** (stable short answer for that topic), pulls **evidence**
-from search, then writes a **dossier** that deepens the brief. The model’s
-output is **checked** so the paragraph still starts on the concept you asked
-for; if it drifts, Bird Brain retries once, then falls back to the brief
-instead of saving a wrong-topic wall of text. Optional **"lite" briefing**
-reuses the same brief as lightweight hypertext without rewriting it. This is
-the "lite" mode that is currently hidden behind the "live" mode idea.
-
-```mermaid
-flowchart TB
-  folder[Project folder]
-  ingest[Ingest readable files and code]
-  projectMap[Project map and starter topics]
-  concept[User opens concept]
-  brief[Brief for this topic]
-  evidence[Evidence retrieval]
-  dossier[Expanded dossier]
-  verify[Subject check]
-  retry[Retry if off target]
-  fallback[Brief fallback]
-  cache[Cache verified result]
-  ui[Display main dossier]
-  linked[Optional lite briefing]
-
-  folder --> ingest
-  ingest --> projectMap
-  projectMap --> concept
-  concept --> brief
-  brief --> evidence
-  evidence --> dossier
-  dossier --> verify
-  verify -->|passes| cache
-  verify -->|fails| retry
-  retry --> verify
-  retry -->|still fails| fallback
-  fallback --> cache
-  cache --> ui
-  concept --> linked
-  brief --> linked
-```
-
-
-
-Everything is local. The files, the generated pages, and the map of
-concepts all live on your machine. The only thing that leaves is the
-small slice of text the model needs to write a page— and only if
-you've pointed it at a remote model like Claude or GPT. Using a local
-model (via Ollama) keeps the whole loop offline.
-
-Bird Brain's own workspace databases and registry live under the repo's
-`data/` folder by default (`data/workspaces.json` + `data/workspace-dbs/`).
-Set `BIRDBRAIN_DATA_DIR` if you want that metadata somewhere else; older
-installs may still have a legacy `~/.birdbrain/` folder that gets merged in
-on first launch.
-
----
-
-## Data model (today)
-
-
-| Table                                                   | Role                                                               |
-| ------------------------------------------------------- | ------------------------------------------------------------------ |
-| `documents`, `chunks`                                   | Raw corpus + heading-delimited chunks                              |
-| `chunks_fts`                                            | FTS5 mirror for lexical retrieval                                  |
-| `entities`, `entity_mentions`                           | Seeded + emerged concepts and their per-chunk mentions             |
-| `concept_synthesis`                                     | Cached hypertextual paragraphs (live + queued profiles)            |
-| `synthesis_queue`                                       | Background work list for queued synthesis                          |
-| `ontology_runs`, `ontology_concepts`, `ontology_lenses` | LLM-assisted ontology overview                                     |
-| `concept_precontext_cache`                              | Bird's-eye precontext per concept, invalidated by corpus signature |
-| `participation_sessions`, `participation_events`        | Live click/read trail that feeds the memesis loop                  |
-| `project_meta`                                          | Project name + engine config + guidance notes                      |
-
+For desktop/Tauri build and packaging instructions, see
+[RUNNING_THE_PROTOTYPE.md](RUNNING_THE_PROTOTYPE.md).
 
 ---
 

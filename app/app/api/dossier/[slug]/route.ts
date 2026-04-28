@@ -5,6 +5,7 @@ import {
   getEntityMentions,
   getRelatedEntities,
   getSynthesisForSlug,
+  getProjectMeta,
   enqueueSynthesis,
   getStartupStatus,
   deleteSynthesisCacheForSlug,
@@ -23,11 +24,41 @@ import { withWorkspaceRoute } from '@/lib/workspaces/route';
 // Next.js: allow up to 3 minutes for inline LLM synthesis.
 export const maxDuration = 180;
 
+function getCachedDossierForMode(slug: string, preferredProfile: string, demoMode: boolean) {
+  const preferred = getSynthesisForSlug(slug, preferredProfile);
+  if (preferred) {
+    return {
+      row: preferred,
+      profile: preferredProfile === 'queued' || preferredProfile === 'queued_spanify' ? 'queued' as const : 'live' as const,
+      variant: preferredProfile.endsWith('_spanify') ? 'spanify_precontext' as const : 'default' as const,
+    };
+  }
+  if (!demoMode) return null;
+
+  const fallbacks: Array<{
+    cacheProfile: string;
+    profile: 'live' | 'queued';
+    variant: DossierSynthesisVariant;
+  }> = [
+    { cacheProfile: 'queued', profile: 'queued', variant: 'default' },
+    { cacheProfile: 'live_spanify', profile: 'live', variant: 'spanify_precontext' },
+    { cacheProfile: 'live', profile: 'live', variant: 'default' },
+    { cacheProfile: 'queued_spanify', profile: 'queued', variant: 'spanify_precontext' },
+  ];
+
+  for (const fallback of fallbacks) {
+    if (fallback.cacheProfile === preferredProfile) continue;
+    const row = getSynthesisForSlug(slug, fallback.cacheProfile);
+    if (row) return { row, profile: fallback.profile, variant: fallback.variant };
+  }
+  return null;
+}
+
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ slug: string }> }
 ) {
-  return withWorkspaceRoute(req, async () => {
+  return withWorkspaceRoute(req, async (ctx) => {
     const { slug } = await context.params;
     const search = req.nextUrl.searchParams;
     const profile = search.get('mode') === 'live' ? 'live' : 'queued';
@@ -47,6 +78,47 @@ export async function GET(
     const conflictEvidence = getEntityMentions(slug, 12);
     const possible_conflicts = findPossibleEvidenceConflicts(conflictEvidence);
     const precontext = getPrecontextForSlug(slug);
+    const localProvider = getProjectMeta().engine_provider === 'local';
+    const demoMode = localProvider && ctx.id === 'demo_mode';
+
+    const cached = getCachedDossierForMode(slug, cacheProfile, demoMode);
+    if (cached) {
+      return NextResponse.json({
+        concept,
+        precontext,
+        pending: false,
+        profile: cached.profile,
+        synthesis_variant: cached.variant,
+        paragraph: cached.row.paragraph,
+        generated_at: cached.row.generated_at,
+        generator: cached.row.generator,
+        model: cached.row.model,
+        evidence,
+        related,
+        possible_conflicts,
+      });
+    }
+
+    if (localProvider) {
+      return NextResponse.json({
+        blocked: true,
+        concept,
+        precontext,
+        pending: false,
+        profile,
+        synthesis_variant: synthesisVariant,
+        paragraph: null,
+        evidence,
+        related,
+        possible_conflicts,
+        error: {
+          code: demoMode ? 'demo-mode-cache-miss' : 'api-config-required',
+          message: demoMode
+            ? 'Use API config with your own project materials!'
+            : 'Configure Cursor CLI, OpenAI, Anthropic, or Ollama to generate dossiers for this workspace.',
+        },
+      });
+    }
 
     if (!startup.ready) {
       return NextResponse.json(
@@ -69,24 +141,6 @@ export async function GET(
         },
         { status: 409 }
       );
-    }
-
-    const cached = getSynthesisForSlug(slug, cacheProfile);
-    if (cached) {
-      return NextResponse.json({
-        concept,
-        precontext,
-        pending: false,
-        profile,
-        synthesis_variant: synthesisVariant,
-        paragraph: cached.paragraph,
-        generated_at: cached.generated_at,
-        generator: cached.generator,
-        model: cached.model,
-        evidence,
-        related,
-        possible_conflicts,
-      });
     }
 
     if (profile === 'queued') {
@@ -165,7 +219,7 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<{ slug: string }> }
 ) {
-  return withWorkspaceRoute(req, async () => {
+  return withWorkspaceRoute(req, async (ctx) => {
     const { slug } = await context.params;
     let body: RegenerateBody = {};
     try {
@@ -194,6 +248,48 @@ export async function POST(
     const evidence = getEntityMentions(slug, 6);
     const conflictEvidence = getEntityMentions(slug, 12);
     const possible_conflicts = findPossibleEvidenceConflicts(conflictEvidence);
+    const localProvider = getProjectMeta().engine_provider === 'local';
+    const demoMode = localProvider && ctx.id === 'demo_mode';
+
+    const cacheProfile = dossierCacheProfile(profile, synthesisVariant);
+    const cached = getCachedDossierForMode(slug, cacheProfile, demoMode);
+    if (cached) {
+      return NextResponse.json({
+        concept,
+        precontext: getPrecontextForSlug(slug),
+        pending: false,
+        profile: cached.profile,
+        synthesis_variant: cached.variant,
+        paragraph: cached.row.paragraph,
+        generated_at: cached.row.generated_at,
+        generator: cached.row.generator,
+        model: cached.row.model,
+        evidence,
+        related,
+        possible_conflicts,
+      });
+    }
+
+    if (localProvider) {
+      return NextResponse.json({
+        blocked: true,
+        concept,
+        precontext: getPrecontextForSlug(slug),
+        pending: false,
+        profile,
+        synthesis_variant: synthesisVariant,
+        paragraph: null,
+        evidence,
+        related,
+        possible_conflicts,
+        error: {
+          code: demoMode ? 'demo-mode-cache-miss' : 'api-config-required',
+          message: demoMode
+            ? 'Use API config with your own project materials!'
+            : 'Configure Cursor CLI, OpenAI, Anthropic, or Ollama to generate dossiers for this workspace.',
+        },
+      });
+    }
 
     if (!startup.ready) {
       return NextResponse.json(

@@ -154,18 +154,20 @@ export function WorkbenchPanel() {
   }
 
   return (
-    <div className="metro-panel thin-scrollbar" style={{ height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
-      <div style={{ marginBottom: 18 }}>
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
           search + answers
         </div>
         <h1 className="metro-title">workbench</h1>
-        <p className="metro-lead">
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 18, paddingBottom: 40 }} className="thin-scrollbar">
+        <p className="metro-lead" style={{ marginTop: 0 }}>
           Use the top bar to search the files and the second bar to ask Bird Brain questions.
           Search stays predictable; asking pulls evidence first, then writes an answer or returns
           a grounded fallback.
         </p>
-      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
         <div className="metro-surface" style={{ padding: '14px 16px' }}>
@@ -421,6 +423,7 @@ export function WorkbenchPanel() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

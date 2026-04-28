@@ -13,17 +13,29 @@ import {
 // because engine config is a workspace-scoped value stored in project_meta.
 
 export async function GET(req: Request) {
-  return withWorkspaceRoute(req, async () => {
+  return withWorkspaceRoute(req, async (ctx) => {
     const meta = getProjectMeta();
     const engine = getEngineForWorkspace();
+    const provider = (isEngineProvider(meta.engine_provider)
+      ? meta.engine_provider
+      : 'local') as EngineProvider;
+    const effectiveProvider: EngineProvider =
+      provider === 'local' && ctx.id !== 'demo_mode' ? 'cursor-cli' : provider;
+    const effectiveEngine =
+      effectiveProvider === provider
+        ? engine
+        : buildEngine({
+            provider: effectiveProvider,
+            model: meta.engine_model || null,
+            endpoint: meta.engine_endpoint || null,
+            apiKeyEnvVar: meta.engine_api_key_env || null,
+          });
     return NextResponse.json({
-      provider: (isEngineProvider(meta.engine_provider)
-        ? meta.engine_provider
-        : 'cursor-cli') as EngineProvider,
-      model: meta.engine_model || engine.defaultModel,
+      provider: effectiveProvider,
+      model: meta.engine_model || effectiveEngine.defaultModel,
       endpoint: meta.engine_endpoint,
       api_key_env: meta.engine_api_key_env,
-      default_model: engine.defaultModel,
+      default_model: effectiveEngine.defaultModel,
     });
   });
 }
@@ -35,8 +47,15 @@ interface PutBody {
   api_key_env?: string;
 }
 
+function cleanProviderModel(provider: EngineProvider, model: string | undefined): string | null {
+  const trimmed = model?.trim();
+  if (!trimmed || trimmed === 'no-ai') return null;
+  if (provider === 'local') return null;
+  return trimmed;
+}
+
 export async function PUT(req: NextRequest) {
-  return withWorkspaceRoute(req, async () => {
+  return withWorkspaceRoute(req, async (ctx) => {
     let body: PutBody;
     try {
       body = (await req.json()) as PutBody;
@@ -49,11 +68,17 @@ export async function PUT(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (body.provider === 'local' && ctx.id !== 'demo_mode') {
+      return NextResponse.json(
+        { error: 'Demo mode is only available for the bundled Demo Mode workspace.' },
+        { status: 403 }
+      );
+    }
     const next = updateWorkspaceEngineConfig({
       provider: body.provider,
-      model: body.model ?? null,
-      endpoint: body.endpoint ?? null,
-      apiKeyEnvVar: body.api_key_env ?? null,
+      model: cleanProviderModel(body.provider, body.model),
+      endpoint: body.provider === 'local' ? null : body.endpoint ?? null,
+      apiKeyEnvVar: body.provider === 'local' ? null : body.api_key_env ?? null,
     });
     const engine = buildEngine(next);
     return NextResponse.json({

@@ -3,15 +3,12 @@
 mod commands;
 mod sidecar;
 
-use commands::{
-    keychain_clear, keychain_get, keychain_set, open_workspace_window, pick_folder,
-};
+use commands::{keychain_clear, keychain_get, keychain_set, open_workspace_window};
 use sidecar::SidecarState;
 use tauri::Manager;
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
@@ -44,7 +41,6 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            pick_folder,
             keychain_get,
             keychain_set,
             keychain_clear,

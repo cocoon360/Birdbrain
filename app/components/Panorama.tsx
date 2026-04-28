@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useDossier } from './DossierContext';
 import { EngineSettingsDrawer } from './EngineSettingsDrawer';
 import { RobotBirdLogo } from './RobotBirdLogo';
 import {
@@ -22,7 +21,6 @@ export interface PanoramaPanel {
 interface PanoramaProps {
   panels: PanoramaPanel[];
   initial?: string;
-  onBeginAgain?: () => void;
   workspaceName?: string;
   onSwitchWorkspace?: () => void;
 }
@@ -30,18 +28,15 @@ interface PanoramaProps {
 export function Panorama({
   panels,
   initial,
-  onBeginAgain,
   workspaceName,
   onSwitchWorkspace,
 }: PanoramaProps) {
-  const { branches } = useDossier();
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [active, setActive] = useState<string>(initial ?? panels[0]?.id ?? '');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [engineSummary, setEngineSummary] = useState<{ provider: string; model: string } | null>(null);
   const [wheelScroll, setWheelScroll] = useState<boolean>(true);
-  const unreadBranches = branches.filter((branch) => branch.unread).length;
 
   // Load wheel-scroll preference from localStorage on mount (client-only) so
   // SSR markup matches the default (on) and we avoid hydration mismatches.
@@ -169,15 +164,19 @@ export function Panorama({
           right: 0,
           zIndex: 50,
           minHeight: chrome.barMinHeight,
-          padding: `${space.sm}px ${space.xxl}px`,
+          padding: `${space.xs}px ${space.xl}px`,
           display: 'flex',
           alignItems: 'center',
           gap: space.lg,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          whiteSpace: 'nowrap',
           background: 'var(--bg)',
           borderBottom: '1px solid var(--border)',
-          pointerEvents: 'none',
+          pointerEvents: 'auto',
           fontFamily: metroFont,
         }}
+        className="thin-scrollbar"
       >
         <div
           style={{
@@ -223,6 +222,7 @@ export function Panorama({
             marginLeft: space.md,
             pointerEvents: 'auto',
             alignItems: 'flex-end',
+            flexShrink: 0,
           }}
         >
           {panels.map((p) => (
@@ -244,6 +244,7 @@ export function Panorama({
             alignItems: 'center',
             gap: space.md,
             pointerEvents: 'auto',
+            flexShrink: 0,
           }}
         >
           <button
@@ -269,45 +270,21 @@ export function Panorama({
             <span style={{ color: 'var(--accent)' }}>engine</span>
           </button>
           {onSwitchWorkspace && (
-            <button type="button" onClick={onSwitchWorkspace} style={chromeButtonStyle({})}>
-              switch workspace
-            </button>
-          )}
-          {onBeginAgain && (
             <button
               type="button"
-              onClick={onBeginAgain}
-              title="Return to startup in Always fresh mode. The next begin will rebuild the project map and clear cached briefs/dossiers."
-              style={chromeButtonStyle({})}
+              onClick={onSwitchWorkspace}
+              title="Return to the workspace picker."
+              style={{
+                ...chromeButtonStyle({}),
+                background: 'var(--accent)',
+                borderColor: 'var(--accent)',
+                color: '#041015',
+                fontWeight: 800,
+              }}
             >
               begin again
             </button>
           )}
-          <div
-            style={{
-              fontSize: type.stamp,
-              letterSpacing: '0.1em',
-              color: unreadBranches > 0 ? '#e74c9b' : 'var(--text-muted)',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {unreadBranches > 0 ? `${unreadBranches} new branches` : 'branches quiet'}
-          </div>
-          <span
-            style={{
-              fontSize: type.stamp,
-              letterSpacing: '0.1em',
-              color: 'var(--accent)',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              maxWidth: 220,
-            }}
-            title="Concepts open in the primary queued dossier lane. Use the right drawer for optional Lite mode."
-          >
-            primary queued dossiers
-          </span>
         </div>
       </div>
 
@@ -320,7 +297,7 @@ export function Panorama({
           overflowY: 'hidden',
           scrollSnapType: 'x proximity',
           scrollBehavior: 'smooth',
-          paddingTop: 68,
+          paddingTop: 60,
           display: 'flex',
           flexDirection: 'row',
         }}
@@ -336,7 +313,7 @@ export function Panorama({
               flex: '0 0 auto',
               width: 'min(1100px, 92vw)',
               marginRight: i === panels.length - 1 ? 0 : space.lg,
-              height: 'calc(100vh - 68px)',
+              height: 'calc(100vh - 60px)',
               scrollSnapAlign: 'start',
               background: 'var(--bg)',
               borderRight: i === panels.length - 1 ? 'none' : '1px solid var(--border)',

@@ -16,9 +16,9 @@ interface BrowsePayload {
   error?: string;
 }
 
-// Web fallback for the native folder picker. Since Bird Brain's backend
-// runs on the user's own machine, we can safely expose a directory-only
-// browser that pages through the real filesystem.
+// In-app folder browser. Since Bird Brain's backend runs on the user's own
+// machine, we can safely expose a directory-only browser that pages through
+// the real filesystem (desktop and web).
 
 export function FolderBrowserDialog({
   initialPath,

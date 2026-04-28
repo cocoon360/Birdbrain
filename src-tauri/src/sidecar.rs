@@ -41,7 +41,7 @@ impl SidecarState {
             .current_dir(&sidecar_dir)
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
-        apply_sidecar_process_env(&mut child, port);
+        apply_sidecar_process_env(handle, &mut child, port);
         let mut child = child
             .spawn()
             .with_context(|| format!("failed to spawn sidecar via {:?}", node_binary))?;
@@ -80,10 +80,14 @@ impl Drop for SidecarState {
 /// GUI-launched macOS apps often inherit a minimal PATH; prepend standard
 /// install locations so optional CLIs remain discoverable. Cursor-related
 /// vars are re-copied from the Tauri parent when set (e.g. launchctl / Terminal).
-fn apply_sidecar_process_env(cmd: &mut Command, port: u16) {
+fn apply_sidecar_process_env(handle: &AppHandle, cmd: &mut Command, port: u16) {
     cmd.env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production");
+
+    if let Ok(app_data_dir) = handle.path().app_data_dir() {
+        cmd.env("BIRDBRAIN_DATA_DIR", app_data_dir);
+    }
 
     #[cfg(unix)]
     {

@@ -23,7 +23,6 @@ const PANELS: PanoramaPanel[] = [
 export function WorkspaceShell({ workspace }: { workspace: WorkspaceShape }) {
   const router = useRouter();
   const [entered, setEntered] = useState(false);
-  const [startupMode, setStartupMode] = useState<'automatic-cached' | 'always-fresh'>('automatic-cached');
 
   return (
     <WorkspaceProvider workspace={workspace}>
@@ -32,10 +31,6 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceShape }) {
           <>
             <Panorama
               panels={PANELS}
-              onBeginAgain={() => {
-                setStartupMode('always-fresh');
-                setEntered(false);
-              }}
               workspaceName={workspace.name}
               onSwitchWorkspace={() => router.push('/')}
             />
@@ -44,10 +39,8 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceShape }) {
           </>
         ) : (
           <StartupShell
-            initialMode={startupMode}
             onEnter={() => {
               setEntered(true);
-              setStartupMode('automatic-cached');
             }}
             workspaceName={workspace.name}
             onSwitchWorkspace={() => router.push('/')}

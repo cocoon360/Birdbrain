@@ -78,6 +78,14 @@ if (fs.existsSync(fileUriToPathSrc)) {
   copyDir(fileUriToPathSrc, fileUriToPathDest);
 }
 
+const demoModeSrc = path.join(appRoot, "demo", "demo-mode");
+if (fs.existsSync(path.join(demoModeSrc, "app.db"))) {
+  const demoModeDest = path.join(standalone, "demo", "demo-mode");
+  console.log("copying demo mode workspace → standalone/demo/demo-mode");
+  fs.rmSync(demoModeDest, { recursive: true, force: true });
+  copyDir(demoModeSrc, demoModeDest);
+}
+
 console.log("sidecar packaged at:", standalone);
 
 // Mirror into src-tauri/bundle/sidecar for Tauri `bundle.resources` (must stay outside

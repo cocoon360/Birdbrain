@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import Database from 'better-sqlite3';
 
 // Workspace registry. A workspace is a folder on disk that Bird Brain reads,
 // while Bird Brain's own app data lives under the repo-level data/ folder. We
@@ -30,6 +31,8 @@ const APP_DATA_DIR = process.env.BIRDBRAIN_DATA_DIR
 const REGISTRY_PATH = path.join(APP_DATA_DIR, 'workspaces.json');
 const WORKSPACE_DB_DIR = path.join(APP_DATA_DIR, 'workspace-dbs');
 const DEFAULT_FILE: RegistryFile = { schemaVersion: 1, workspaces: [] };
+const DEMO_MODE_WORKSPACE_ID = 'demo_mode';
+const DEMO_MODE_WORKSPACE_NAME = 'Demo Mode';
 
 function ensureRegistryDir() {
   if (!fs.existsSync(APP_DATA_DIR)) {
@@ -94,6 +97,86 @@ function writeRegistry(data: RegistryFile) {
   const tmp = REGISTRY_PATH + `.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
   fs.renameSync(tmp, REGISTRY_PATH);
+}
+
+function bundledDemoModeDbPath() {
+  const explicit = process.env.BIRDBRAIN_DEMO_MODE_DB?.trim();
+  const candidates = [
+    explicit ? path.resolve(explicit) : '',
+    path.resolve(process.cwd(), 'demo', 'demo-mode', 'app.db'),
+    path.resolve(process.cwd(), '..', 'app', 'demo', 'demo-mode', 'app.db'),
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
+}
+
+function forceDemoModeEngine(dbPath: string) {
+  const db = new Database(dbPath);
+  try {
+    const stmt = db.prepare(
+      `INSERT INTO project_meta (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    );
+    const tx = db.transaction(() => {
+      stmt.run('engine_provider', 'local');
+      stmt.run('engine_model', '');
+      stmt.run('engine_endpoint', '');
+      stmt.run('engine_api_key_env', '');
+    });
+    tx();
+  } finally {
+    db.close();
+  }
+}
+
+export function ensureDemoModeWorkspace(): WorkspaceRecord | null {
+  const sourceDb = bundledDemoModeDbPath();
+  if (!sourceDb) return null;
+
+  ensureRegistryDir();
+  const targetBase = path.join(APP_DATA_DIR, 'demo-mode');
+  const targetDb = path.join(targetBase, 'app.db');
+  fs.mkdirSync(targetBase, { recursive: true });
+
+  const refresh = process.env.BIRDBRAIN_REFRESH_DEMO === '1';
+  if (refresh || !fs.existsSync(targetDb)) {
+    fs.copyFileSync(sourceDb, targetDb);
+  }
+  forceDemoModeEngine(targetDb);
+
+  const now = Math.floor(Date.now() / 1000);
+  const record: WorkspaceRecord = {
+    id: DEMO_MODE_WORKSPACE_ID,
+    name: DEMO_MODE_WORKSPACE_NAME,
+    folder_path: targetBase,
+    db_path: targetDb,
+    created_at: now,
+    last_opened_at: null,
+  };
+
+  const reg = readRegistry();
+  const existingIndex = reg.workspaces.findIndex((workspace) => workspace.id === DEMO_MODE_WORKSPACE_ID);
+  if (existingIndex >= 0) {
+    const existing = reg.workspaces[existingIndex];
+    const next = {
+      ...existing,
+      name: existing.name || DEMO_MODE_WORKSPACE_NAME,
+      folder_path: targetBase,
+      db_path: targetDb,
+    };
+    if (
+      next.name !== existing.name ||
+      next.folder_path !== existing.folder_path ||
+      next.db_path !== existing.db_path
+    ) {
+      reg.workspaces[existingIndex] = next;
+      writeRegistry(reg);
+    }
+    return next;
+  }
+
+  reg.workspaces.unshift(record);
+  writeRegistry(reg);
+  return record;
 }
 
 function newWorkspaceId() {

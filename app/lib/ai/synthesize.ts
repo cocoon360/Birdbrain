@@ -114,6 +114,30 @@ export async function synthesizeForSlug(
   const meta = getProjectMeta();
   const precontext = (getPrecontextForSlug(slug) ?? (await synthesizePrecontextForSlug(slug))) as ConceptPrecontextRow;
 
+  if (meta.engine_provider === 'local') {
+    const aliasRows = getAllEntitiesWithAliases();
+    const linked = linkKnownEntities(
+      [{ text: precontext.precontext_text }],
+      aliasRows.map((r) => ({ slug: r.slug, name: r.name, aliases: r.aliases }))
+    );
+    upsertSynthesis({
+      entityId: entity.id,
+      profile,
+      paragraph: linked,
+      generator: 'local',
+      model: 'no-ai',
+    });
+    markQueueDone(entity.id, profile);
+    return {
+      paragraph: linked,
+      precontext,
+      generator: 'local',
+      model: 'no-ai',
+      profile,
+      promptChars: 0,
+    };
+  }
+
   const mergedEvidence = mergeSynthesisEvidence({
     slug,
     profile,
@@ -232,6 +256,29 @@ async function synthesizeSpanifyOnlyFromPrecontext(
       'No precontext_text to segment; run precontext first or ingest the corpus.',
       ''
     );
+  }
+
+  if (meta.engine_provider === 'local') {
+    const linked = linkKnownEntities(
+      [{ text: canonical }],
+      aliasRows.map((r) => ({ slug: r.slug, name: r.name, aliases: r.aliases }))
+    );
+    upsertSynthesis({
+      entityId: entity.id,
+      profile: 'live',
+      paragraph: linked,
+      generator: 'local',
+      model: 'no-ai',
+    });
+    markQueueDone(entity.id, 'live');
+    return {
+      paragraph: linked,
+      precontext,
+      generator: 'local',
+      model: 'no-ai',
+      profile: 'live',
+      promptChars: 0,
+    };
   }
 
   const prompt = buildSpanifyOnlyPrompt({

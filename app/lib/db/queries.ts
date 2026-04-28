@@ -614,7 +614,7 @@ export function getProjectMeta(): ProjectMeta {
     guidance_notes: map.get('guidance_notes') ?? '',
     guidance_files: safeJsonArray(map.get('guidance_files') ?? '[]'),
     corpus_signature: map.get('corpus_signature') ?? '',
-    engine_provider: map.get('engine_provider') ?? 'cursor-cli',
+    engine_provider: map.get('engine_provider') ?? 'local',
     engine_model: map.get('engine_model') ?? '',
     engine_endpoint: map.get('engine_endpoint') ?? '',
     engine_api_key_env: map.get('engine_api_key_env') ?? '',
@@ -628,6 +628,13 @@ export function setProjectMetaValue(key: string, value: string) {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`
     )
     .run(key, value);
+}
+
+export function getProjectMetaValue(key: string): string | null {
+  const row = getDb()
+    .prepare(`SELECT value FROM project_meta WHERE key = ?`)
+    .get(key) as { value: string } | undefined;
+  return row?.value ?? null;
 }
 
 export interface ProjectEngineConfig {
@@ -675,6 +682,8 @@ export interface StartupStatus {
   latest_run: OntologyRunRow | null;
 }
 
+const ONTOLOGY_RUN_STUCK_AFTER_SECONDS = 15 * 60;
+
 export function getLatestOntologyRun(): OntologyRunRow | null {
   return (
     (getDb()
@@ -691,7 +700,17 @@ export function getLatestOntologyRun(): OntologyRunRow | null {
 
 export function getStartupStatus(): StartupStatus {
   const meta = getProjectMeta();
-  const latest = getLatestOntologyRun();
+  let latest = getLatestOntologyRun();
+  if (
+    latest?.status === 'running' &&
+    latest.started_at < Math.floor(Date.now() / 1000) - ONTOLOGY_RUN_STUCK_AFTER_SECONDS
+  ) {
+    failOntologyRun(
+      latest.id,
+      'Previous project-map build did not finish. It may have timed out, been interrupted, or the app may have closed during generation.'
+    );
+    latest = getLatestOntologyRun();
+  }
   const current = meta.corpus_signature;
   const latestSig = latest?.corpus_signature ?? null;
   const missing = !latest;

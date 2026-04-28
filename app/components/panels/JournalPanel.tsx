@@ -140,16 +140,19 @@ export function JournalPanel() {
   const unread = branches.filter((branch) => branch.unread).length;
 
   return (
-    <div className="metro-panel thin-scrollbar" style={{ height: '100%', overflowY: 'auto', paddingBottom: 48 }}>
-      <div style={{ marginBottom: 18 }}>
+    <div className="metro-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>
           the archive, watching back
         </div>
         <h1 className="metro-title">journal</h1>
-        <p className="metro-lead">
-          Today&rsquo;s reading, summarized by the archive. Status and branches follow.
-        </p>
       </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 18, paddingBottom: 48 }} className="thin-scrollbar">
+        <p className="metro-lead" style={{ marginTop: 0 }}>
+          Today&rsquo;s reading, summarized by the archive. Branch trails are saved per workspace and
+          return when you reopen Bird Brain.
+        </p>
 
       <MemesisCard
         payload={memesis}
@@ -168,9 +171,22 @@ export function JournalPanel() {
         laneState={laneState}
       />
 
-      {branches.length > 0 && (
         <div style={{ marginTop: 28 }}>
-          <SectionHeader title="BRANCHES TO CHECK OUT" accent={BRANCH_COLORS.new} />
+          <SectionHeader title={branches.length > 0 ? 'BRANCHES TO CHECK OUT' : 'BRANCH TRAILS'} accent={BRANCH_COLORS.new} />
+          {branches.length === 0 ? (
+            <div
+              className="metro-surface"
+              style={{
+                padding: '12px 14px',
+                color: 'var(--text-dim)',
+                fontSize: 13,
+                lineHeight: 1.55,
+              }}
+            >
+              Open a concept from the Hub or a linked phrase inside a dossier to start a branch.
+              Branches are stored with the workspace, so they can reappear in the Journal later.
+            </div>
+          ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
             {branches.map((branch) => (
               <BranchCard
@@ -182,8 +198,9 @@ export function JournalPanel() {
               />
             ))}
           </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

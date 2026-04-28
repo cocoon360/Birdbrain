@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { isTauri, keychainClear, keychainGet, keychainSet } from '@/lib/desktop/tauri-bridge';
 import { chromeButtonStyle, metroFont, space, type } from '@/lib/ui/metro-theme';
+import { useOptionalWorkspace } from './WorkspaceProvider';
 
-type Provider = 'cursor-cli' | 'openai' | 'anthropic' | 'ollama';
+type Provider = 'local' | 'cursor-cli' | 'openai' | 'anthropic' | 'ollama';
 
 interface EngineConfig {
   provider: Provider;
@@ -29,6 +30,12 @@ interface SecretStatus {
 }
 
 const PROVIDER_COPY: Record<Provider, { title: string; blurb: string; modelHint: string; keyHint: string }> = {
+  local: {
+    title: 'Demo mode',
+    blurb: 'Click through pregenerated material. Some links work, some demonstrate branches, and some show where API config unlocks your own project.',
+    modelHint: 'not used',
+    keyHint: 'not used',
+  },
   'cursor-cli': {
     title: 'Cursor CLI',
     blurb: 'Uses your logged-in cursor-agent binary. No API key needed.',
@@ -64,6 +71,8 @@ export function EngineSettingsDrawer({
   onClose: () => void;
   onSaved?: (next: EngineConfig) => void;
 }) {
+  const workspace = useOptionalWorkspace();
+  const isDemoWorkspace = workspace?.id === 'demo_mode';
   const [config, setConfig] = useState<EngineConfig | null>(null);
   const [provider, setProvider] = useState<Provider>('cursor-cli');
   const [model, setModel] = useState('');
@@ -84,6 +93,22 @@ export function EngineSettingsDrawer({
   const [cliShowAll, setCliShowAll] = useState(false);
   const [cliModelsLoading, setCliModelsLoading] = useState(false);
   const [cliModelsError, setCliModelsError] = useState<string | null>(null);
+  const providerOptions: Provider[] = isDemoWorkspace
+    ? ['local', 'cursor-cli', 'openai', 'anthropic', 'ollama']
+    : ['cursor-cli', 'openai', 'anthropic', 'ollama'];
+
+  function chooseProvider(next: Provider) {
+    if (next === 'local' && !isDemoWorkspace) return;
+    setProvider(next);
+    setTest(null);
+    if (next === 'local') {
+      setModel('');
+      setEndpoint('');
+      setApiKeyEnv('');
+      return;
+    }
+    if (model === 'no-ai') setModel('');
+  }
 
   useEffect(() => {
     setHasKeychain(isTauri());
@@ -123,13 +148,13 @@ export function EngineSettingsDrawer({
       .then((r) => r.json())
       .then((data: EngineConfig) => {
         setConfig(data);
-        setProvider(data.provider);
-        setModel(data.model || '');
+        setProvider(data.provider === 'local' && !isDemoWorkspace ? 'cursor-cli' : data.provider);
+        setModel(data.provider === 'local' || data.model === 'no-ai' ? '' : data.model || '');
         setEndpoint(data.endpoint || '');
         setApiKeyEnv(data.api_key_env || '');
       })
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, isDemoWorkspace]);
 
   const defaultKeyEnvFor = (p: Provider) =>
     p === 'openai' ? 'OPENAI_API_KEY' : p === 'anthropic' ? 'ANTHROPIC_API_KEY' : '';
@@ -209,9 +234,9 @@ export function EngineSettingsDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          model: model || undefined,
-          endpoint: endpoint || undefined,
-          api_key_env: apiKeyEnv || undefined,
+          model: provider === 'local' ? undefined : model || undefined,
+          endpoint: provider === 'local' ? undefined : endpoint || undefined,
+          api_key_env: provider === 'local' ? undefined : apiKeyEnv || undefined,
         }),
       });
       const data = (await res.json()) as EngineConfig;
@@ -220,6 +245,13 @@ export function EngineSettingsDrawer({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveAndClose() {
+    if (dirty) {
+      await save();
+    }
+    onClose();
   }
 
   async function runTest() {
@@ -231,9 +263,9 @@ export function EngineSettingsDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider,
-          model: model || undefined,
-          endpoint: endpoint || undefined,
-          api_key_env: apiKeyEnv || undefined,
+          model: provider === 'local' ? undefined : model || undefined,
+          endpoint: provider === 'local' ? undefined : endpoint || undefined,
+          api_key_env: provider === 'local' ? undefined : apiKeyEnv || undefined,
         }),
       });
       const data = (await res.json()) as TestResult;
@@ -299,8 +331,8 @@ export function EngineSettingsDrawer({
           >
             engine settings
           </div>
-          <button type="button" onClick={onClose} style={chromeButtonStyle({})}>
-            close
+          <button type="button" onClick={saveAndClose} disabled={saving} style={chromeButtonStyle({ disabled: saving })}>
+            {saving ? 'saving…' : dirty ? 'save and close' : 'close'}
           </button>
         </div>
 
@@ -321,37 +353,92 @@ export function EngineSettingsDrawer({
           <div style={{ color: 'var(--text-muted)', fontSize: type.body }}>loading…</div>
         ) : (
           <>
-            <div style={{ marginBottom: space.lg }}>
+            <div style={{ marginBottom: space.md }}>
               <Label>provider</Label>
               <div
-                className="metro-surface"
-                style={{ marginTop: space.sm, padding: 0, overflow: 'hidden' }}
+                style={{
+                  marginTop: space.sm,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  gap: 8,
+                }}
               >
-                {(Object.keys(PROVIDER_COPY) as Provider[]).map((p) => (
+                {providerOptions.map((p) => (
                   <button
                     key={p}
                     type="button"
-                    className={`metro-list-row${provider === p ? ' metro-list-row--selected' : ''}`}
-                    onClick={() => setProvider(p)}
+                    onClick={() => chooseProvider(p)}
+                    className="metro-surface"
+                    style={{
+                      textAlign: 'left',
+                      padding: '9px 11px',
+                      cursor: 'pointer',
+                      borderColor: provider === p ? 'var(--accent)' : 'var(--border)',
+                      minHeight: 76,
+                    }}
                   >
                     <div
                       style={{
-                        fontSize: 15,
+                        fontSize: 13,
                         fontWeight: 600,
                         color: provider === p ? 'var(--accent)' : 'var(--text)',
-                        marginBottom: 4,
+                        marginBottom: 3,
                       }}
                     >
                       {PROVIDER_COPY[p].title}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.45 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.35 }}>
                       {PROVIDER_COPY[p].blurb}
                     </div>
                   </button>
                 ))}
+                <div style={{ minHeight: 76, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={runTest}
+                    disabled={testing}
+                    style={{
+                      ...secondaryButton(testing),
+                      padding: '8px 10px',
+                      width: '100%',
+                      flex: 1,
+                      background: testing ? '#191919' : '#2a2a2a',
+                      borderColor: '#3a3a3a',
+                    }}
+                  >
+                    {testing ? 'testing…' : 'test'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={save}
+                    disabled={saving || !dirty}
+                    style={{
+                      ...primaryButton(saving || !dirty),
+                      padding: '8px 10px',
+                      width: '100%',
+                      flex: 1,
+                      background: saving || !dirty ? '#171717' : 'var(--status-canon)',
+                      color: saving || !dirty ? '#777' : '#041015',
+                      borderColor: saving || !dirty ? '#2b2b2b' : 'transparent',
+                      opacity: 1,
+                    }}
+                  >
+                    {saving ? 'saving…' : dirty ? 'save' : 'saved'}
+                  </button>
+                </div>
               </div>
             </div>
 
+            {provider === 'local' ? (
+              <div
+                className="metro-surface"
+                style={{ marginBottom: space.md, padding: '12px 14px', color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5 }}
+              >
+                Demo mode is a partial clickable tour: some links open pregenerated briefs, some
+                demonstrate branch trails, and others intentionally ask you to use API config with
+                your own project materials.
+              </div>
+            ) : (
             <div style={{ marginBottom: space.md }}>
               <Label>model</Label>
               {provider === 'cursor-cli' ? (
@@ -443,6 +530,7 @@ export function EngineSettingsDrawer({
                 />
               )}
             </div>
+            )}
 
             {(provider === 'ollama' || provider === 'openai' || provider === 'anthropic') && (
               <div style={{ marginBottom: space.md }}>
@@ -541,15 +629,6 @@ export function EngineSettingsDrawer({
                 </div>
               </>
             )}
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 6, marginBottom: space.lg, flexWrap: 'wrap' }}>
-              <button type="button" onClick={save} disabled={saving || !dirty} style={primaryButton(saving || !dirty)}>
-                {saving ? 'saving…' : dirty ? 'save' : 'saved'}
-              </button>
-              <button type="button" onClick={runTest} disabled={testing} style={secondaryButton(testing)}>
-                {testing ? 'testing…' : 'test connection'}
-              </button>
-            </div>
 
             {test && (
               <div

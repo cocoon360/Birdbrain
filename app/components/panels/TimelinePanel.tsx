@@ -43,16 +43,16 @@ export function TimelinePanel() {
       <div style={{ flexShrink: 0, marginBottom: 18 }}>
         <div className="metro-subtitle" style={{ marginBottom: 6 }}>what changed</div>
         <h1 className="metro-title">timeline</h1>
-        <p className="metro-lead" style={{ maxWidth: 540 }}>
-          Documents in modification order. Useful for catching up on recent decisions and spotting
-          drift across days.
-        </p>
       </div>
 
       <div
         style={{ flex: 1, overflowY: 'auto', paddingRight: 18 }}
         className="thin-scrollbar"
       >
+        <p className="metro-lead" style={{ maxWidth: 540, marginTop: 0 }}>
+          Documents in modification order. Useful for catching up on recent decisions and spotting
+          drift across days.
+        </p>
         {Object.entries(grouped).map(([date, rows]) => (
           <div key={date} style={{ marginBottom: 22 }}>
             <div
