@@ -32,22 +32,22 @@ type IngestPhase =
   | { kind: 'empty'; folder: string; workspaceId: string }
   | { kind: 'error'; folder: string; message: string };
 
-type OpenMode = 'last-opened' | 'fresh-ingest' | 'pick-folder';
+type OpenMode = 'last-opened' | 'web-upload' | 'pick-folder';
 
 const INCLUDE_CODE_LS = 'birdbrain:include-code';
 
 const OPEN_MODE_COPY: Record<OpenMode, { title: string; description: string }> = {
   'last-opened': {
-    title: 'Pick up where you left off',
+    title: 'Reopen last workspace',
     description: 'Open the most recent workspace with its saved project map. Fastest way to resume.',
   },
-  'fresh-ingest': {
-    title: 'Re-ingest and rebuild',
-    description: 'Re-scan the selected folder for new or changed files, then open it. Use after heavy edits.',
+  'web-upload': {
+    title: 'Upload new folder',
+    description: 'Choose a folder from this browser and build a temporary hosted workspace.',
   },
   'pick-folder': {
-    title: 'Begin a new project',
-    description: 'Add a brand-new folder as a workspace and build its project map from scratch.',
+    title: 'Local path ingest',
+    description: 'Browse or paste a path for desktop/local testing against this machine or server.',
   },
 };
 
@@ -95,9 +95,9 @@ export function WorkspacePicker({
 
   useEffect(() => {
     if (!mostRecent && openMode === 'last-opened') {
-      setOpenMode('pick-folder');
+      setOpenMode(webUploadEnabled ? 'web-upload' : 'pick-folder');
     }
-  }, [mostRecent, openMode]);
+  }, [mostRecent, openMode, webUploadEnabled]);
 
   async function refreshWorkspaces() {
     const res = await fetch('/api/workspaces', { cache: 'no-store' });
@@ -110,10 +110,6 @@ export function WorkspacePicker({
   async function beginAgain() {
     if (openMode === 'last-opened' && mostRecent) {
       await openWorkspace(mostRecent, { ingestFirst: false });
-      return;
-    }
-    if (openMode === 'fresh-ingest' && mostRecent) {
-      await openWorkspace(mostRecent, { ingestFirst: true });
       return;
     }
     await addWorkspace();
@@ -249,7 +245,6 @@ export function WorkspacePicker({
   const busy = busyId !== null;
   const canBeginAgain =
     (openMode === 'last-opened' && Boolean(mostRecent)) ||
-    (openMode === 'fresh-ingest' && Boolean(mostRecent)) ||
     (openMode === 'pick-folder' && folderInput.trim().length > 0);
 
   return (
@@ -360,7 +355,8 @@ export function WorkspacePicker({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
             {(Object.keys(OPEN_MODE_COPY) as OpenMode[]).map((key) => {
               const disabled =
-                (key === 'last-opened' || key === 'fresh-ingest') && !mostRecent;
+                (key === 'last-opened' && !mostRecent) ||
+                (key === 'web-upload' && !webUploadEnabled);
               return (
                 <button
                   key={key}
@@ -398,9 +394,6 @@ export function WorkspacePicker({
 
         {openMode === 'pick-folder' && (
           <div style={{ marginTop: space.lg, display: 'grid', gap: 12 }}>
-            {webUploadEnabled && (
-              <WebUploadPanel onOpenWorkspace={enterWorkspace} />
-            )}
             <div className="metro-surface" style={{ padding: 14 }}>
             <div
               style={{
@@ -513,7 +506,11 @@ export function WorkspacePicker({
           </div>
         )}
 
-        {openMode !== 'pick-folder' && (
+        {openMode === 'web-upload' && webUploadEnabled && (
+          <WebUploadPanel onOpenWorkspace={enterWorkspace} />
+        )}
+
+        {openMode === 'last-opened' && (
           <div
             style={{
               display: 'flex',
@@ -539,7 +536,7 @@ export function WorkspacePicker({
                 opacity: busy ? 0.7 : 1,
               }}
             >
-              {busy ? 'working…' : openMode === 'fresh-ingest' ? 're-ingest' : 'open'}
+              {busy ? 'working…' : 'open'}
             </button>
             {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
           </div>
