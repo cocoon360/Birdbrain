@@ -115,7 +115,7 @@ export function WebUploadPanel({ onOpenWorkspace }: { onOpenWorkspace: (workspac
   return (
     <div className="metro-surface" style={{ padding: 14, marginTop: 16 }}>
       <div style={{ fontSize: '0.62rem', color: 'var(--accent)', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700 }}>
-        web upload beta
+        hosted browser upload
       </div>
       <p style={{ margin: '8px 0 12px', color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.45 }}>
         Choose a project folder. Bird Brain uploads readable notes, docs, and source files while

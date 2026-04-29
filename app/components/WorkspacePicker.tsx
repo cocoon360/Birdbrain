@@ -345,7 +345,6 @@ export function WorkspacePicker({
           />
         </div>
 
-        {!webUploadEnabled && (
         <div style={{ marginTop: space.lg }}>
           <div
             style={{
@@ -396,10 +395,13 @@ export function WorkspacePicker({
             })}
           </div>
         </div>
-        )}
 
-        {!webUploadEnabled && openMode === 'pick-folder' && (
-          <div style={{ marginTop: space.lg }}>
+        {openMode === 'pick-folder' && (
+          <div style={{ marginTop: space.lg, display: 'grid', gap: 12 }}>
+            {webUploadEnabled && (
+              <WebUploadPanel onOpenWorkspace={enterWorkspace} />
+            )}
+            <div className="metro-surface" style={{ padding: 14 }}>
             <div
               style={{
                 fontSize: '0.62rem',
@@ -409,8 +411,14 @@ export function WorkspacePicker({
                 marginBottom: 10,
               }}
             >
-              folder to ingest
+              local/server path ingest
             </div>
+            {webUploadEnabled && (
+              <p style={{ margin: '0 0 12px', color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.45 }}>
+                Use this for desktop/local testing. On a hosted web deployment, Browse and absolute paths refer
+                to the server environment, not the visitor&apos;s computer.
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
               <input
                 type="text"
@@ -501,10 +509,11 @@ export function WorkspacePicker({
             {message && (
               <div style={{ marginTop: 8, fontSize: '0.7rem', color: '#888' }}>{message}</div>
             )}
+            </div>
           </div>
         )}
 
-        {!webUploadEnabled && openMode !== 'pick-folder' && (
+        {openMode !== 'pick-folder' && (
           <div
             style={{
               display: 'flex',
@@ -534,10 +543,6 @@ export function WorkspacePicker({
             </button>
             {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
           </div>
-        )}
-
-        {webUploadEnabled && (
-          <WebUploadPanel onOpenWorkspace={enterWorkspace} />
         )}
       </div>
 
