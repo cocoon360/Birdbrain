@@ -34,16 +34,6 @@ async function getInvoke(): Promise<TauriInvoke['invoke'] | null> {
   }
 }
 
-export async function openWorkspaceWindow(
-  workspaceId: string,
-  title?: string
-): Promise<boolean> {
-  const invoke = await getInvoke();
-  if (!invoke) return false;
-  await invoke('open_workspace_window', { workspaceId, title });
-  return true;
-}
-
 export async function keychainGet(envVar: string): Promise<string | null> {
   const invoke = await getInvoke();
   if (!invoke) return null;

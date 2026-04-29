@@ -2,9 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isTauri, openWorkspaceWindow } from '@/lib/desktop/tauri-bridge';
 import { FolderBrowserDialog } from './FolderBrowserDialog';
 import { RobotBirdLogo } from './RobotBirdLogo';
+import { WebUploadPanel } from './WebUploadPanel';
+import { isSupabaseUploadConfigured } from '@/lib/supabase/client';
 import { metroFont, space, type } from '@/lib/ui/metro-theme';
 
 interface WorkspaceRecord {
@@ -61,15 +62,12 @@ export function WorkspacePicker({
   const [nameInput, setNameInput] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
-  const [hasNative, setHasNative] = useState(false);
   const [openMode, setOpenMode] = useState<OpenMode>('last-opened');
   const [browserOpen, setBrowserOpen] = useState(false);
   const [phase, setPhase] = useState<IngestPhase>({ kind: 'idle' });
   const [includeCode, setIncludeCode] = useState(true);
-
-  useEffect(() => {
-    setHasNative(isTauri());
-  }, []);
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
+  const webUploadEnabled = isSupabaseUploadConfigured();
 
   useEffect(() => {
     try {
@@ -167,6 +165,7 @@ export function WorkspacePicker({
     const ingestIncludeCode = includeCodeOverride ?? includeCode;
     setBusyId(ws.id);
     setMessage('');
+    setPendingRemoveId(null);
     try {
       if (ingestFirst) {
         setPhase({ kind: 'ingesting', folder: ws.folder_path });
@@ -221,11 +220,30 @@ export function WorkspacePicker({
   );
 
   async function removeWorkspace(ws: WorkspaceRecord) {
-    if (!confirm(`Remove ${ws.name} from the picker? (The folder and DB file are not deleted.)`)) {
+    if (ws.id === 'demo_mode') {
+      setMessage('Demo Mode is pinned so the packaged demo is always available.');
       return;
     }
-    await fetch(`/api/workspaces?id=${encodeURIComponent(ws.id)}`, { method: 'DELETE' });
-    await refreshWorkspaces();
+    if (pendingRemoveId !== ws.id) {
+      setPendingRemoveId(ws.id);
+      setMessage(`Click remove again to remove ${ws.name} from the picker. The folder and DB stay on disk.`);
+      return;
+    }
+    setBusyId(ws.id);
+    setMessage('');
+    try {
+      const res = await fetch(`/api/workspaces?id=${encodeURIComponent(ws.id)}`, { method: 'DELETE' });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setMessage(json?.error ?? `Could not remove ${ws.name}.`);
+        return;
+      }
+      setPendingRemoveId(null);
+      setWorkspaces((current) => current.filter((workspace) => workspace.id !== ws.id));
+      await refreshWorkspaces();
+    } finally {
+      setBusyId(null);
+    }
   }
 
   const busy = busyId !== null;
@@ -327,6 +345,7 @@ export function WorkspacePicker({
           />
         </div>
 
+        {!webUploadEnabled && (
         <div style={{ marginTop: space.lg }}>
           <div
             style={{
@@ -377,8 +396,9 @@ export function WorkspacePicker({
             })}
           </div>
         </div>
+        )}
 
-        {openMode === 'pick-folder' && (
+        {!webUploadEnabled && openMode === 'pick-folder' && (
           <div style={{ marginTop: space.lg }}>
             <div
               style={{
@@ -484,7 +504,7 @@ export function WorkspacePicker({
           </div>
         )}
 
-        {openMode !== 'pick-folder' && (
+        {!webUploadEnabled && openMode !== 'pick-folder' && (
           <div
             style={{
               display: 'flex',
@@ -514,6 +534,10 @@ export function WorkspacePicker({
             </button>
             {message && <span style={{ fontSize: '0.74rem', color: '#888' }}>{message}</span>}
           </div>
+        )}
+
+        {webUploadEnabled && (
+          <WebUploadPanel onOpenWorkspace={enterWorkspace} />
         )}
       </div>
 
@@ -600,23 +624,15 @@ export function WorkspacePicker({
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
                   <button
+                    type="button"
                     onClick={() => openWorkspace(ws, { ingestFirst: false })}
                     disabled={busyId === ws.id}
                     style={primaryButtonStyle(busyId === ws.id)}
                   >
                     {busyId === ws.id ? 'opening…' : 'open'}
                   </button>
-                  {hasNative && (
-                    <button
-                      onClick={() => openWorkspaceWindow(ws.id, ws.name)}
-                      disabled={busyId === ws.id}
-                      style={secondaryButtonStyle(false)}
-                      title="Open this workspace in its own native window"
-                    >
-                      new window
-                    </button>
-                  )}
                   <button
+                    type="button"
                     onClick={() => openWorkspace(ws, { ingestFirst: true, includeCode })}
                     disabled={busyId === ws.id}
                     style={secondaryButtonStyle(busyId === ws.id)}
@@ -624,11 +640,17 @@ export function WorkspacePicker({
                     re-ingest + open
                   </button>
                   <button
-                    onClick={() => removeWorkspace(ws)}
+                    type="button"
+                    onClick={() => void removeWorkspace(ws)}
                     disabled={busyId === ws.id}
-                    style={dangerButtonStyle(busyId === ws.id)}
+                    style={{
+                      ...dangerButtonStyle(busyId === ws.id),
+                      ...(pendingRemoveId === ws.id
+                        ? { background: 'rgba(231, 76, 155, 0.12)', borderColor: '#e74c9b' }
+                        : null),
+                    }}
                   >
-                    remove
+                    {pendingRemoveId === ws.id ? 'confirm remove' : 'remove'}
                   </button>
                 </div>
               </div>

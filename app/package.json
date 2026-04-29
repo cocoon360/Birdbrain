@@ -15,6 +15,7 @@
     "tauri:build": "sh -c 'cd ../src-tauri && env -u CI cargo tauri build'"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.1",
     "better-sqlite3": "^12.9.0",
     "gray-matter": "^4.0.3",
     "next": "16.2.4",

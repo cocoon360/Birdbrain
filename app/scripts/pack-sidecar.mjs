@@ -46,6 +46,12 @@ function copyDir(src, dest) {
   }
 }
 
+function removeIfExists(target, reason) {
+  if (!fs.existsSync(target)) return;
+  console.log(`removing ${reason} → ${path.relative(standalone, target)}`);
+  fs.rmSync(target, { recursive: true, force: true });
+}
+
 const staticSrc = path.join(appRoot, ".next", "static");
 const staticDest = path.join(standalone, ".next", "static");
 console.log("copying .next/static → standalone/.next/static");
@@ -77,6 +83,13 @@ const fileUriToPathDest = path.join(standalone, "node_modules", "file-uri-to-pat
 if (fs.existsSync(fileUriToPathSrc)) {
   copyDir(fileUriToPathSrc, fileUriToPathDest);
 }
+
+// Bird Brain does not use Next's image optimizer in the packaged sidecar, but
+// the standalone trace can include optional Sharp/libvips binaries. They add
+// size and extra native code-signing/notarization surface without helping the
+// desktop app.
+removeIfExists(path.join(standalone, "node_modules", "sharp"), "unused sharp image optimizer");
+removeIfExists(path.join(standalone, "node_modules", "@img"), "unused sharp/libvips native packages");
 
 const demoModeSrc = path.join(appRoot, "demo", "demo-mode");
 if (fs.existsSync(path.join(demoModeSrc, "app.db"))) {

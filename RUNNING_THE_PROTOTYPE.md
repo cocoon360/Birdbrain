@@ -146,8 +146,7 @@ own host (or via CI).
    fixed loopback port (`127.0.0.1:34521`). This is the same Next.js server
    you run during `npm run dev`.
 2. The Tauri window loads `http://127.0.0.1:34521/` — the workspace picker.
-3. When you pick "Open in new window", the Rust `open_workspace_window`
-   IPC command spawns a second webview pointed at the sidecar's
+3. Opening a workspace navigates the existing webview to the sidecar's
    `/w/<workspaceId>` route.
 4. API keys go through the `keychain_*` IPC commands, which use the OS
    credential store (Keychain on macOS, Credential Vault on Windows, libsecret
@@ -179,7 +178,7 @@ This writes `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, and
 
 ---
 
-## 4. Multi-window, multi-folder workflow
+## 4. Multi-folder workflow
 
 From the workspace picker:
 
@@ -187,8 +186,8 @@ From the workspace picker:
    and web use the same chooser.
 2. Bird Brain ingests the folder into its own SQLite database. The first
    ingest may take a minute for large archives.
-3. Click **Open in new window** to launch that workspace in its own native
-   window. Repeat for each project. Each window has its own:
+3. Click **Open** to enter that workspace. Repeat for each project. Each
+   workspace has its own:
    - database,
    - synthesis cache,
    - exploration branches (scoped by `localStorage`),
@@ -206,6 +205,19 @@ ingest + ontology pipeline runs.
   workspace for a model-free tour, or open the engine drawer and configure
   Cursor CLI, OpenAI, Anthropic, or Ollama for generated overview/brief passes
   in your own workspace.
+- **Web upload beta.** Browser folder selections go directly to Supabase Storage
+  via signed upload URLs, then the server downloads only readable text/code
+  files and registers a temporary workspace. Required environment
+  variables:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY` *(server only; never expose publicly)*
+  - `NEXT_PUBLIC_SUPABASE_UPLOAD_BUCKET` *(defaults to `birdbrain-uploads`)*
+  - `NEXT_PUBLIC_BIRDBRAIN_WEB_UPLOAD_MAX_MB` *(defaults to `100`)*
+  - `BIRDBRAIN_WEB_ACCEPTED_TEXT_MAX_BYTES` *(defaults to `25 MB` of readable files)*
+  - `BIRDBRAIN_WEB_ACCEPTED_FILE_MAX` *(defaults to `1000` files)*
+  - `BIRDBRAIN_DATA_DIR=/tmp/birdbrain-data` is recommended on Vercel so
+    temporary SQLite workspace data writes to a writable location.
 - **Sidecar log says `node: command not found`.** Install Node.js 20+ or
   set `BIRDBRAIN_NODE=/abs/path/to/node` before launching the app.
 - **`better-sqlite3` load error.** Re-run `npm install` inside `app/` on
@@ -230,7 +242,7 @@ birdbrain/
 │   ├── lib/workspaces/   # Registry + AsyncLocalStorage context
 │   └── scripts/          # ingest.ts, pack-sidecar.mjs
 ├── src-tauri/            # Rust desktop shell
-│   ├── src/commands/     # IPC: keychain, open window
+│   ├── src/commands/     # IPC: keychain
 │   ├── src/sidecar.rs    # Spawns node <resource>/sidecar/server.js
 │   └── tauri.conf.json   # Bundles bundle/sidecar → resources/sidecar
 └── RUNNING_THE_PROTOTYPE.md   # this file

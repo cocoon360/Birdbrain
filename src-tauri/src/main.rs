@@ -3,7 +3,7 @@
 mod commands;
 mod sidecar;
 
-use commands::{keychain_clear, keychain_get, keychain_set, open_workspace_window};
+use commands::{keychain_clear, keychain_get, keychain_set};
 use sidecar::SidecarState;
 use tauri::Manager;
 
@@ -44,7 +44,6 @@ fn main() {
             keychain_get,
             keychain_set,
             keychain_clear,
-            open_workspace_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bird Brain");
