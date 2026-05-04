@@ -39,7 +39,7 @@ const PROVIDER_COPY: Record<Provider, { title: string; blurb: string; modelHint:
   'cursor-cli': {
     title: 'Cursor CLI',
     blurb: 'Uses your logged-in cursor-agent binary. No API key needed.',
-    modelHint: 'e.g. gpt-5.5-medium, auto (run: agent models)',
+    modelHint: 'e.g. composer-2-fast, auto (run: agent models)',
     keyHint: 'not used (auth via cursor-agent login)',
   },
   openai: {

@@ -5,7 +5,7 @@ import { EngineError } from './types';
 // Wraps the existing Cursor Agent CLI runner in the Engine interface.
 // This keeps the binary + logged-in Cursor account as the default path
 // so an existing Cursor Pro+ user doesn't need to paste API keys.
-const DEFAULT_CURSOR_MODEL = 'gpt-5.5-medium';
+const DEFAULT_CURSOR_MODEL = 'composer-2-fast';
 
 export class CursorCliEngine implements Engine {
   readonly provider = 'cursor-cli' as const;
@@ -13,8 +13,8 @@ export class CursorCliEngine implements Engine {
 
   constructor(config: EngineConfig) {
     const fromEnv = process.env.CURSOR_AGENT_MODEL;
-    // First-run default: GPT-5.5 Medium gives strong synthesis quality at a
-    // lower current price point. Users can override in the engine drawer.
+    // First-run default: Composer 2 Fast keeps Cursor CLI usage on the cheaper
+    // auto-pricing path. Users can override in the engine drawer.
     this.defaultModel =
       (config.model || fromEnv || DEFAULT_CURSOR_MODEL).trim() || DEFAULT_CURSOR_MODEL;
   }
